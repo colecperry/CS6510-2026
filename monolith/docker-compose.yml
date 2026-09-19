@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: self-checkout-db
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Default max_connections (100) is too low for our pool (up to 120,
+    # sized for stress mode's 100 stations) - raised with headroom.
+    command: postgres -c max_connections=200
+
+volumes:
+  pgdata:
