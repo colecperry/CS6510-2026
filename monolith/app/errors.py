@@ -1,53 +1,48 @@
-# Custom exceptions that routers raise, auto-converted into ApiError JSON.
+# Errors the routers raise, and the handler that turns them into the error
+# JSON the contract specifies.
+#
+# main.py calls register_error_handlers() once, so any route can just raise
+# and the right response comes out.
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.models import ApiError
 
 
-# Base error: carries the two fields ApiError needs, plus a status code.
 class ApiException(Exception):
+    """Base for every error a route can raise."""
+
     status_code: int = 400
 
     def __init__(self, error: str, message: str):
-        """Stores the error code and message a router wants to report.
-
-        Takes: error (short machine-readable code), message (human-readable text).
-        Returns: nothing.
-        """
-        self.error = error
-        self.message = message
+        self.error = error  # short code for machines, e.g. "UNKNOWN_SKU"
+        self.message = message  # sentence for a person to read
 
 
-# One subclass per status code routers need to raise.
 class InvalidRequestError(ApiException):
+    """The request itself was malformed."""
+
     status_code = 400
 
 
 class NotFoundError(ApiException):
+    """The thing asked for does not exist."""
+
     status_code = 404
 
 
 class ConflictError(ApiException):
+    """It exists, but its current state forbids this operation."""
+
     status_code = 409
 
 
-# Runs automatically whenever any route raises an ApiException.
 async def _handle_api_exception(request: Request, exc: ApiException) -> JSONResponse:
-    """Converts a raised ApiException into the spec's error JSON shape.
-
-    Takes: the incoming request and the exception that was raised.
-    Returns: a JSONResponse with the right status code and ApiError body.
-    """
+    """Renders any ApiException as the contract's {error, message} body."""
     body = ApiError(error=exc.error, message=exc.message)
     return JSONResponse(status_code=exc.status_code, content=body.model_dump(by_alias=True))
 
 
-# Called once at app startup to wire the handler above into FastAPI.
 def register_error_handlers(app: FastAPI) -> None:
-    """Registers the handler above so FastAPI uses it for every ApiException.
-
-    Takes: the FastAPI app instance.
-    Returns: nothing.
-    """
+    """Wires the handler above onto the app. Call once, at startup."""
     app.add_exception_handler(ApiException, _handle_api_exception)

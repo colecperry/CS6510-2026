@@ -1,11 +1,14 @@
+# Every tunable value in the app, read from .env once at startup.
+#
+# Other files import `settings` rather than reading environment variables
+# themselves.
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Auto-fills its fields from .env / environment variables on creation.
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    # Each field's default matches .env.example; .env overrides if present.
+    # Defaults match .env.example; .env overrides any of them.
     database_url: str = "postgresql://checkout:checkout@localhost:5433/self_checkout"
     window_size: int = 1000
     slide_interval: int = 500
@@ -13,5 +16,6 @@ class Settings(BaseSettings):
     popularity_snapshot_cap: int = 100
 
 
-# One shared instance - other files import this instead of re-reading .env.
+# The .env file is read when this line runs, so every importer shares one
+# already-validated copy.
 settings = Settings()

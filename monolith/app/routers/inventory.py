@@ -1,4 +1,4 @@
-# GET /inventory/low-stock - filled in at Step 18.
+# GET /inventory/low-stock - which items are running out.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
@@ -12,15 +12,11 @@ router = APIRouter()
 
 @router.get("/inventory/low-stock")
 async def get_low_stock(threshold: int | None = None) -> LowStockResponse:
-    """Lists every item currently below a stock threshold.
-
-    Takes: threshold - optional query param; falls back to the configured default.
-    Returns: a LowStockResponse with the threshold used and matching alerts.
-    """
-    # Query param overrides the configured default if given.
+    """Lists every item currently below a stock threshold, lowest first."""
+    # The ?threshold= query parameter wins if given, otherwise fall back to
+    # the configured default.
     effective_threshold = threshold if threshold is not None else settings.low_stock_default_threshold
 
-    # Every SKU currently below the threshold, lowest stock first.
     rows = await pool_module.pool.fetch(
         """
         SELECT c.sku, c.name, s.qty
@@ -32,7 +28,8 @@ async def get_low_stock(threshold: int | None = None) -> LowStockResponse:
         effective_threshold,
     )
 
-    # Computed live at request time, like the mock server - no stored history.
+    # Alerts are worked out fresh on each request rather than stored, so
+    # there is no history table to keep in step with actual stock.
     now = datetime.now(timezone.utc)
     alerts = [
         LowStockAlert(

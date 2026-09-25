@@ -1,4 +1,6 @@
-# GET /analytics/popular-items - filled in at Step 20.
+# GET /analytics/popular-items - the current most-scanned ranking.
+#
+# Only reads. The ranking itself is built by popularity.py as scans come in.
 from fastapi import APIRouter
 
 import app.pool as pool_module
@@ -9,12 +11,8 @@ router = APIRouter()
 
 @router.get("/analytics/popular-items")
 async def get_popular_items(limit: int = 10) -> PopularItemsResponse:
-    """Returns the current popular-items ranking.
-
-    Takes: limit - how many top items to return (defaults to 10).
-    Returns: a PopularItemsResponse with the window metadata and ranked items.
-    """
-    # Window metadata: single row, always id=1.
+    """Returns the current ranking, plus which scans it was built from."""
+    # Which window the ranking covers. Always a single row, id = 1.
     state = await pool_module.pool.fetchrow(
         """
         SELECT window_size, slide_interval, window_start, window_end, computed_at
@@ -23,7 +21,7 @@ async def get_popular_items(limit: int = 10) -> PopularItemsResponse:
         """
     )
 
-    # Already ranked and capped by Step 19 - just take the top `limit`.
+    # Already ranked and trimmed when it was built, so just take the top few.
     rows = await pool_module.pool.fetch(
         "SELECT rank, sku, name, scan_count FROM popularity_snapshot ORDER BY rank LIMIT $1",
         limit,

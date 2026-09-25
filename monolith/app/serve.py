@@ -1,5 +1,7 @@
-# Launches the app via hypercorn, with HTTP/2 upgrades disabled.
-# Run as: uv run python -m app.serve
+# Starts the web server. Run with: uv run python -m app.serve
+#
+# Use this rather than launching hypercorn directly, because it disables
+# HTTP/2 upgrades first. README.md explains why at length.
 import asyncio
 
 import h11
@@ -10,13 +12,11 @@ from hypercorn.protocol import h11 as hypercorn_h11
 from app.main import app
 
 
-# The Java load client probes every request with "Upgrade: h2c". Hypercorn
-# ignores that probe when the request has a body, but the client's bodyless
-# GET /items at startup does trigger a real upgrade - after which the client
-# sends everything over HTTP/2, which destabilises badly under sustained
-# load (stream-limit errors, then mass timeouts). Plain HTTP/1.1 handles the
-# same concurrency without trouble, so we refuse the upgrade entirely.
-# Hypercorn exposes no config flag for this, hence the patch.
+# The Java load client offers to upgrade every request to HTTP/2. If
+# hypercorn accepts, the client switches protocol and then collapses under
+# sustained load with stream-limit errors and timeouts. Plain HTTP/1.1
+# handles the same concurrency without trouble, so we refuse the offer.
+# Hypercorn has no config flag for this, hence patching the method.
 async def _refuse_h2c_upgrade(self, event: h11.Request) -> None:
     if event.method == b"PRI" and event.target == b"*" and event.http_version == b"2.0":
         raise hypercorn_h11.H2ProtocolAssumedError(

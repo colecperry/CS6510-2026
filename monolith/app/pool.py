@@ -1,43 +1,34 @@
+# The shared set of database connections.
+#
+# main.py opens it at startup and closes it at shutdown. Every other module
+# reaches for the `pool` global directly when it needs to run a query.
 import asyncpg
 
 from app.config import settings
 
-# Shared across the whole app - created once at startup, reused per request.
 pool: asyncpg.Pool | None = None
 
 
-# Opens the pool - called once, at app startup.
 async def connect() -> None:
-    """Opens the shared connection pool.
-
-    Takes: nothing.
-    Returns: nothing - sets the module-level `pool` variable.
-    """
+    """Opens the pool. Call once, at startup."""
     global pool
-    # Default max_size (10) is too small for stress mode (up to 100 stations)
-    # plus the popularity recompute path's occasional extra connection.
+    # 120 covers stress mode's 100 stations plus the popularity recompute's
+    # occasional extra connection. docker-compose raises Postgres's own
+    # limit to 200 so it can accept them.
     pool = await asyncpg.create_pool(settings.database_url, min_size=10, max_size=120)
 
 
-# Closes every connection - called once, at app shutdown.
 async def disconnect() -> None:
-    """Closes every connection in the pool.
-
-    Takes: nothing.
-    Returns: nothing.
-    """
+    """Closes every connection. Call once, at shutdown."""
     global pool
     if pool is not None:
         await pool.close()
         pool = None
 
 
-# Borrows one connection from the pool, then returns it automatically.
+# Written as a FastAPI dependency, but nothing uses it - the routers all read
+# the `pool` global instead.
 async def get_conn():
-    """FastAPI dependency that lends one connection for a single request.
-
-    Takes: nothing.
-    Returns: a connection, automatically released when the request ends.
-    """
+    """Lends one connection for the length of a single request."""
     async with pool.acquire() as conn:
         yield conn

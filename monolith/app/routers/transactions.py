@@ -1,4 +1,7 @@
-# POST /transactions, .../items, .../complete, GET /transactions/{id} - Steps 14-17.
+# The checkout itself: start a basket, scan into it, pay, look one up.
+#
+# These four routes carry the money-handling rules, so most of the care in
+# this file goes into never losing or double-counting a stock decrement.
 from fastapi import APIRouter
 
 import app.catalog_cache as catalog_cache
@@ -17,20 +20,17 @@ from app.models import (
 router = APIRouter()
 
 
-# Starts a new transaction for a station.
 @router.post("/transactions", status_code=201)
 async def start_transaction(body: StartTransactionRequest) -> Transaction:
-    """Starts a new, empty transaction for a station.
-
-    Takes: body - the station ID the customer is checking out at.
-    Returns: the newly created Transaction, with status OPEN.
-    """
-    # Check manually so a blank stationId gives our own 400, not FastAPI's 422.
+    """Opens a new, empty basket for a station."""
+    # Checked by hand so a blank stationId returns our own 400 rather than
+    # FastAPI's 422, which is the wrong error shape.
     station_id = body.station_id.strip()
     if not station_id:
         raise InvalidRequestError("INVALID_REQUEST", "stationId is required")
 
-    # Insert the new row and read back its generated fields in one step.
+    # RETURNING gives back the generated id and defaults without a second
+    # query to read the row we just wrote.
     row = await pool_module.pool.fetchrow(
         """
         INSERT INTO transactions (station_id)
@@ -49,21 +49,17 @@ async def start_transaction(body: StartTransactionRequest) -> Transaction:
     )
 
 
-# Records one scanned unit into an open transaction's basket.
 @router.post("/transactions/{transaction_id}/items")
 async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
-    """Records one scanned unit into an open transaction's basket.
-
-    Takes: transaction_id (from the URL), body - the SKU that was scanned.
-    Returns: the updated item count and running total for this transaction.
-    """
-    # SKU lookup is an in-memory dict read, not a database call.
+    """Adds one unit of an item to an open basket."""
+    # Price lookup is a memory read, not a database call.
     cached = catalog_cache.catalog.get(body.sku)
     if cached is None:
         raise NotFoundError("UNKNOWN_SKU", f"No such SKU: {body.sku}")
     name, unit_price = cached
 
-    # Bumps the running counters, but only if the transaction is still OPEN.
+    # The "is it still open?" check lives inside the UPDATE rather than in a
+    # separate SELECT, so another request cannot close the basket in between.
     row = await pool_module.pool.fetchrow(
         """
         UPDATE transactions
@@ -75,7 +71,8 @@ async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
         unit_price,
     )
     if row is None:
-        # Matched nothing above - work out whether that's a 404 or a 409.
+        # Nothing matched, which means either no such basket or it is closed.
+        # Only now is it worth a second query to tell those apart.
         status_row = await pool_module.pool.fetchrow(
             "SELECT status FROM transactions WHERE transaction_id = $1", transaction_id
         )
@@ -83,7 +80,7 @@ async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
             raise NotFoundError("NOT_FOUND", f"No such transaction: {transaction_id}")
         raise ConflictError("TRANSACTION_NOT_OPEN", "Transaction is not open")
 
-    # Permanent record of this scan, used later to build the receipt.
+    # One row per scanned unit. The receipt is built from these at checkout.
     await pool_module.pool.execute(
         """
         INSERT INTO transaction_items (transaction_id, sku, name, unit_price)
@@ -95,7 +92,7 @@ async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
         unit_price,
     )
 
-    # Feeds the popular-items hopping window - separate from the basket above.
+    # Separate from the basket: this feeds the popular-items ranking.
     await popularity.record_scan(body.sku)
 
     return ScanResult(
@@ -108,17 +105,14 @@ async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
     )
 
 
-# Closes out a transaction: finalizes it and decrements stock per SKU.
 @router.post("/transactions/{transaction_id}/complete")
 async def complete_transaction(transaction_id: str) -> Receipt:
-    """Finalizes a transaction: marks it complete and decrements stock per SKU.
-
-    Takes: transaction_id - which transaction to complete.
-    Returns: the Receipt, itemized by SKU.
-    """
+    """Pays for the basket, takes the items out of stock, returns a receipt."""
     async with pool_module.pool.acquire() as conn:
-        async with conn.transaction():  # all-or-nothing: status flip + every decrement
-            # Only finalizes if OPEN and non-empty - both checked in one step.
+        # One transaction around everything below, so the basket is never
+        # marked paid without the stock coming down, or the other way round.
+        async with conn.transaction():
+            # Both rules checked inside the UPDATE: still open, and not empty.
             row = await conn.fetchrow(
                 """
                 UPDATE transactions
@@ -129,7 +123,7 @@ async def complete_transaction(transaction_id: str) -> Receipt:
                 transaction_id,
             )
             if row is None:
-                # Matched nothing above - figure out which error applies.
+                # Work out which of the three reasons it was.
                 status_row = await conn.fetchrow(
                     "SELECT status, item_count FROM transactions WHERE transaction_id = $1",
                     transaction_id,
@@ -140,7 +134,7 @@ async def complete_transaction(transaction_id: str) -> Receipt:
                     raise ConflictError("EMPTY_BASKET", "Cannot complete an empty transaction")
                 raise ConflictError("TRANSACTION_NOT_OPEN", "Transaction already finalized")
 
-            # Group the scanned items by SKU - one row per SKU, with quantity.
+            # Collapse the scanned units into one line per SKU, with a count.
             lines = await conn.fetch(
                 """
                 SELECT sku, name, unit_price, count(*) AS quantity
@@ -152,7 +146,9 @@ async def complete_transaction(transaction_id: str) -> Receipt:
                 transaction_id,
             )
 
-            # Decrement stock per SKU, in a fixed order to avoid deadlocks.
+            # Always in SKU order. Two checkouts holding the same two items
+            # would otherwise be able to grab them in opposite orders and
+            # deadlock waiting on each other.
             for line in lines:
                 await conn.execute(
                     "UPDATE stock SET qty = GREATEST(qty - $2, 0) WHERE sku = $1",
@@ -160,7 +156,6 @@ async def complete_transaction(transaction_id: str) -> Receipt:
                     line["quantity"],
                 )
 
-    # Build the receipt from data already collected above.
     return Receipt(
         transaction_id=transaction_id,
         station_id=row["station_id"],
@@ -180,14 +175,10 @@ async def complete_transaction(transaction_id: str) -> Receipt:
     )
 
 
-# Debugging/instructor use only - not exercised by the load client.
+# Not used by the load client. Here for debugging and for the instructor.
 @router.get("/transactions/{transaction_id}")
 async def get_transaction(transaction_id: str) -> Transaction:
-    """Looks up a transaction's current status, for debugging.
-
-    Takes: transaction_id - which transaction to look up.
-    Returns: the Transaction, or a 404 if it doesn't exist.
-    """
+    """Looks up one basket's current state."""
     row = await pool_module.pool.fetchrow(
         """
         SELECT transaction_id, station_id, status, item_count, running_total, started_at

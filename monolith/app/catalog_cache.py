@@ -1,18 +1,17 @@
-# In-memory copy of the catalog table, so we don't hit Postgres on every scan.
+# In-memory copy of the catalog table, so scans never hit Postgres to find
+# an item's name and price.
+#
+# Filled once at startup by main.py, then only ever read. Safe because no
+# endpoint in the contract can change the catalog.
 import app.pool as pool_module
 
-# sku -> (name, price). Filled once at startup by load(), then only ever read.
+# sku -> (name, price)
 catalog: dict[str, tuple[str, float]] = {}
 
 
 async def load() -> None:
-    """Loads the full catalog table into memory, once at startup.
-
-    Takes: nothing.
-    Returns: nothing - fills the module-level `catalog` dict.
-    """
-    # Read the whole catalog table once, and copy it into the dict above.
+    """Reads the whole catalog into memory. Call once, at startup."""
     rows = await pool_module.pool.fetch("SELECT sku, name, price FROM catalog")
     for row in rows:
-        # Postgres NUMERIC comes back as Decimal - cast to float for the API.
+        # float() so Postgres Decimals do not leak into the rest of the app.
         catalog[row["sku"]] = (row["name"], float(row["price"]))

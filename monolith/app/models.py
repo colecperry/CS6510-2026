@@ -1,4 +1,7 @@
-# Shapes of every request/response body defined in the OpenAPI spec.
+# The shape of every request and response body the API accepts or returns.
+#
+# Defined once here so the wire format lives in one place. Mirrors
+# spec/self-checkout-openapi.yaml.
 from datetime import datetime
 from typing import Literal
 
@@ -6,7 +9,8 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 
-# Base for every model below: auto-generates a camelCase alias per field.
+# Everything below inherits this, which renames fields on the way out:
+# running_total becomes runningTotal, as the contract requires.
 class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -22,7 +26,9 @@ class CatalogResponse(ApiModel):
 
 
 class StartTransactionRequest(ApiModel):
-    # Not required here - our own code validates it, for the right error shape.
+    # Optional here even though the contract requires it. If pydantic
+    # rejected a blank value we would return FastAPI's 422, which is the
+    # wrong error shape, so the transactions layer checks it instead.
     station_id: str = ""
 
 

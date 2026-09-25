@@ -161,6 +161,7 @@ FROM stock s LEFT JOIN li ON li.sku = s.sku;
 ```
 monolith/
 ├── QUALITY-ATTRIBUTES.md  # characteristics analysis + trade-offs
+├── PLAN.md                # the build plan, kept as a record
 ├── app/
 │   ├── main.py            # wires everything together; app startup/shutdown
 │   ├── serve.py           # server launcher (see "Running the server" above)
