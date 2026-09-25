@@ -1,0 +1,31 @@
+[project]
+name = "layered"
+version = "0.1.0"
+description = "Week 2: layered self-checkout backend (FastAPI + Postgres)"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "fastapi>=0.141.1",
+    "hypercorn>=0.18.0",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    # Pinned exactly, not a floor. Starlette is the ASGI layer under FastAPI
+    # and sits on every request, so a version drift here would show up as a
+    # latency difference against week 1 that has nothing to do with the
+    # architecture. The monolith's lock resolved 1.6.0; match it.
+    "starlette==1.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# So tests can import `app` without the project being installed.
+pythonpath = ["."]
+# Lets async test functions run without an @pytest.mark.asyncio decorator on
+# each one. Every service method under test is async, so this is all of them.
+asyncio_mode = "auto"
