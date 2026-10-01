@@ -1,7 +1,7 @@
 # The four checkout endpoints.
 #
-# Each one reads the request, hands it to the transactions layer, and
-# returns what comes back. No rules and no SQL live here.
+# Each route is one line: take the request apart, call the transactions
+# layer, return what comes back. Decisions and SQL live below this, not here.
 from fastapi import APIRouter
 
 from app.api import wiring
@@ -10,7 +10,7 @@ from app.schemas import Receipt, ScanItemRequest, ScanResult, StartTransactionRe
 router = APIRouter()
 
 
-@router.post("/transactions", status_code=201)
+@router.post("/transactions", status_code=201)   # 201 means "created"
 async def start_transaction(body: StartTransactionRequest) -> Transaction:
     return await wiring.transactions.start(body.station_id)
 

@@ -9,10 +9,13 @@ from app.config import settings
 
 async def create_pool() -> asyncpg.Pool:
     """Creates the connection pool. Call once, at startup."""
-    # 120 covers stress mode's 100 stations plus the popularity recompute's
-    # occasional extra connection. docker-compose raises Postgres's own
-    # limit to 200 so it can accept them.
-    return await asyncpg.create_pool(settings.database_url, min_size=10, max_size=120)
+    # A pool keeps connections open and lends them out, because opening one
+    # per query would be far slower than the query itself.
+    return await asyncpg.create_pool(
+        settings.database_url,
+        min_size=10,
+        max_size=120,   # enough for 100 checkouts at once, plus headroom
+    )
 
 
 async def close_pool(pool: asyncpg.Pool) -> None:

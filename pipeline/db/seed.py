@@ -29,10 +29,9 @@ async def seed() -> None:
     """Drops every table, recreates it, and loads the starting data."""
     pool = await create_pool()
     try:
-        await pool.execute(SCHEMA_PATH.read_text())
+        await pool.execute(SCHEMA_PATH.read_text())   # drops and recreates everything
 
-        # copy_records_to_table uses Postgres's bulk COPY, which loads 2000
-        # rows in one round trip instead of 2000 separate INSERTs.
+        # Bulk load, so 2000 items arrive in one trip rather than 2000.
         catalog_rows = build_catalog()
         await pool.copy_records_to_table(
             "catalog", records=catalog_rows, columns=["sku", "name", "price"]

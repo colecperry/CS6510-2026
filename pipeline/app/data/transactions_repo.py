@@ -69,8 +69,9 @@ class TransactionsRepo:
 
     async def bump_counters(self, transaction_id: str, unit_price: float) -> ScanCounters | None:
         """Adds one item to the basket's totals. None if it was not open."""
-        # "Still open?" is part of the UPDATE, not a separate SELECT, so no
-        # other request can close the basket between the check and the write.
+        # Checking "is it open?" and updating happen in one statement. Doing
+        # them separately would leave a gap for another request to pay for
+        # the basket in between.
         row = await self._pool.fetchrow(
             """
             UPDATE transactions
@@ -82,14 +83,14 @@ class TransactionsRepo:
             unit_price,
         )
         if row is None:
-            return None
+            return None                  # not open, or no such basket
         return ScanCounters(row["item_count"], float(row["running_total"]))
 
     async def state_of(self, transaction_id: str) -> TransactionState | None:
         """Reads a basket's status and size. None if there is no such basket."""
-        # Only called after a write was refused, to work out which error to
-        # report. Not on the normal path, so the extra query costs nothing
-        # in the common case.
+        # Answers "why was that refused?" - missing basket, closed one, or
+        # empty one. Only runs after something already failed, so a normal
+        # scan never pays for it.
         row = await self._pool.fetchrow(
             "SELECT status, item_count FROM transactions WHERE transaction_id = $1",
             transaction_id,
@@ -121,11 +122,11 @@ class TransactionsRepo:
         None if the basket could not be paid for; ask state_of() why.
         """
         async with self._pool.acquire() as conn:
-            # One database transaction around all of it. The basket can
-            # never end up marked paid without the stock coming down, or
-            # the stock come down without the basket being marked paid.
+            # Everything inside counts as one all-or-nothing change. A basket
+            # can never end up paid for without the stock coming down, even
+            # if the process dies halfway through.
             async with conn.transaction():
-                # Both rules live in the UPDATE: still open, and not empty.
+                # Both rules are in the WHERE: still open, and not empty.
                 row = await conn.fetchrow(
                     """
                     UPDATE transactions
@@ -136,9 +137,9 @@ class TransactionsRepo:
                     transaction_id,
                 )
                 if row is None:
-                    return None
+                    return None          # refused; the caller asks why
 
-                # Collapse the scanned units into one line per item.
+                # Three scans of the same item become one line, quantity 3.
                 line_rows = await conn.fetch(
                     """
                     SELECT sku, name, unit_price, count(*) AS quantity
@@ -150,14 +151,14 @@ class TransactionsRepo:
                     transaction_id,
                 )
 
-                # Always in SKU order. Two checkouts holding the same two
-                # items could otherwise take them in opposite orders and
-                # sit waiting on each other forever.
-                #
-                # GREATEST(..., 0) because the contract has no "out of
-                # stock" response, so a hot item floors at zero instead.
+                # The ORDER BY above matters here: every checkout takes items
+                # in the same order, so two of them buying the same pair can
+                # never end up each holding what the other needs.
                 for line in line_rows:
                     await conn.execute(
+                        # GREATEST stops stock going below zero. The contract
+                        # has no "out of stock" reply, so a sold-out item
+                        # floors at 0 rather than going negative.
                         "UPDATE stock SET qty = GREATEST(qty - $2, 0) WHERE sku = $1",
                         line["sku"],
                         line["quantity"],

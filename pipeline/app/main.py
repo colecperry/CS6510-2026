@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.analytics.pipeline import AnalyticsPipeline
 from app.analytics.service import AnalyticsService
 from app.api import wiring
 from app.api.error_handlers import register_error_handlers
@@ -32,13 +33,19 @@ async def lifespan(app: FastAPI):
     transactions_repo = TransactionsRepo(pool)
     analytics_repo = AnalyticsRepo(pool)
 
-    # Then the services, each handed the repositories it needs. Transactions
-    # depends on analytics because every scan feeds the popularity window.
+    # The pipeline, and its three filters running in the background. From
+    # here on, scans are written by these rather than by the request.
+    analytics_pipeline = AnalyticsPipeline(
+        analytics_repo, catalog_repo, settings.popularity_snapshot_cap
+    )
+    await analytics_pipeline.start()
+
+    # Then the services, each handed what it needs. Transactions depends on
+    # analytics because every scan feeds the popular-items ranking.
     analytics_service = AnalyticsService(
         analytics_repo,
-        catalog_repo,
+        analytics_pipeline,
         settings.low_stock_default_threshold,
-        settings.popularity_snapshot_cap,
     )
     transaction_service = TransactionService(
         transactions_repo, catalog_repo, analytics_service
@@ -50,6 +57,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Let the filters finish what they are holding before the database goes
+    # away, or queued scans would be lost on every restart.
+    await analytics_pipeline.stop()
     await close_pool(pool)
 
 

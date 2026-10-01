@@ -24,9 +24,9 @@ class TransactionService:
         catalog: CatalogRepo,
         analytics: AnalyticsService,
     ):
-        self._transactions = transactions
-        self._catalog = catalog
-        self._analytics = analytics
+        self._transactions = transactions    # baskets and receipts
+        self._catalog = catalog              # prices, from memory
+        self._analytics = analytics          # where scans go to be counted
 
     def list_items(self) -> CatalogResponse:
         """Returns the whole product list."""
@@ -40,8 +40,8 @@ class TransactionService:
 
     async def start(self, station_id: str) -> Transaction:
         """Opens a new empty basket for a station."""
-        # Checked here rather than by pydantic, so a blank station gets our
-        # own error shape instead of the framework's.
+        # Checked by hand rather than by the request model, so a blank
+        # station gets our error shape instead of the framework's.
         cleaned = station_id.strip()
         if not cleaned:
             raise InvalidRequestError("INVALID_REQUEST", "stationId is required")
@@ -112,6 +112,8 @@ class TransactionService:
 
         Only runs after something already failed, never on the happy path.
         """
+        # The database only says no, not why. This asks the follow-up
+        # question and picks the message the customer should see.
         state = await self._transactions.state_of(transaction_id)
         if state is None:
             return NotFoundError("NOT_FOUND", f"No such transaction: {transaction_id}")
@@ -122,6 +124,7 @@ class TransactionService:
         return ConflictError("TRANSACTION_NOT_OPEN", "Transaction is not open")
 
 
+# Database row to API response. The two happen to line up field for field.
 def _to_transaction(row) -> Transaction:
     return Transaction(
         transaction_id=row.transaction_id,

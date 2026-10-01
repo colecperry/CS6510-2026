@@ -47,20 +47,16 @@ class AnalyticsRepo:
 
         One statement for the whole batch, not one per scan.
         """
-        # Numbering every scan from one sequence is what makes "the last
-        # 1000 scans" a plain range of numbers later on.
-        #
-        # unnest() turns the list into rows, so 50 scans cost one round trip
-        # to Postgres instead of 50. The ingest filter is the only caller,
-        # and it hands over whatever has piled up since its last write.
+        # Every scan gets a number from one counter, so "the last 1000 scans"
+        # becomes a simple range check later.
         return await self._pool.fetchval(
             """
             WITH inserted AS (
                 INSERT INTO scan_log (sku)
-                SELECT unnest($1::text[])
+                SELECT unnest($1::text[])      -- turns the list into rows
                 RETURNING seq
             )
-            SELECT max(seq) FROM inserted
+            SELECT max(seq) FROM inserted      -- the newest number of the batch
             """,
             skus,
         )
@@ -70,22 +66,21 @@ class AnalyticsRepo:
 
         Returns the (start, end) of the window the winner should count.
         """
-        # The "is it due?" test is part of the UPDATE, so with 100 stations
-        # scanning at once exactly one of them can win. Everyone else gets
-        # nothing back and moves on.
+        # Asking and claiming happen in one statement, so two callers can
+        # never both think a rebuild is theirs to do.
         row = await self._pool.fetchrow(
             """
             UPDATE popularity_state
             SET window_start = GREATEST(0, $1 - window_size),
                 window_end = $1,
                 computed_at = now()
-            WHERE $1 - window_end >= slide_interval
+            WHERE $1 - window_end >= slide_interval   -- enough scans since last time?
             RETURNING window_start, window_end
             """,
             scan_seq,
         )
         if row is None:
-            return None
+            return None                  # not due yet
         return row["window_start"], row["window_end"]
 
     async def count_window(self, start: int, end: int, cap: int) -> list[ScanCount]:
@@ -108,8 +103,8 @@ class AnalyticsRepo:
     async def publish_ranking(self, ranked: list[PopularItemRow], prune_before: int) -> None:
         """Swaps in a new ranking and drops scans that can never count again."""
         async with self._pool.acquire() as conn:
-            # One transaction, so a reader never catches the ranking
-            # half-replaced.
+            # The old ranking is deleted before the new one is written, so
+            # this has to be all-or-nothing or a reader could catch it empty.
             async with conn.transaction():
                 await conn.execute("DELETE FROM popularity_snapshot")
                 for item in ranked:
@@ -123,8 +118,8 @@ class AnalyticsRepo:
                         item.name,
                         item.scan_count,
                     )
-                # Scans behind the window can never be counted again, so
-                # drop them rather than letting scan_log grow forever.
+                # No future window reaches back this far, so these rows can
+                # go. Without this the scan log would grow forever.
                 await conn.execute("DELETE FROM scan_log WHERE seq <= $1", prune_before)
 
     async def window_state(self) -> WindowState:

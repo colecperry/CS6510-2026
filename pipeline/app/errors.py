@@ -9,9 +9,9 @@ class DomainError(Exception):
     """Base for every failure the business layers raise."""
 
     def __init__(self, error: str, message: str):
-        super().__init__(message)
-        self.error = error  # short code for machines, e.g. "UNKNOWN_SKU"
-        self.message = message  # sentence for a person to read
+        super().__init__(message)       # so a crash log shows the message
+        self.error = error              # short code for machines, e.g. "UNKNOWN_SKU"
+        self.message = message          # sentence for a person to read
 
 
 class NotFoundError(DomainError):

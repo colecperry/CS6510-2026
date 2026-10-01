@@ -1,12 +1,14 @@
-# Read-through cache of the catalog table. Loaded once at startup, then only
-# ever read, because no endpoint in the spec mutates the catalog.
+# The only place that reads the catalog table.
+#
+# Item names and prices are needed on every scan, so the whole catalog is
+# loaded into memory at startup and served from there. Nothing in the API
+# can change the catalog, so that copy can never go stale.
 from typing import NamedTuple
 
 import asyncpg
 
 
-# A tuple under the hood, so unpacking and indexing cost nothing extra, but
-# with names so callers read `entry.price` instead of `entry[2]`.
+# One catalog row. A tuple, so it is cheap to pass around, but with names.
 class CatalogEntry(NamedTuple):
     sku: str
     name: str
@@ -15,45 +17,24 @@ class CatalogEntry(NamedTuple):
 
 class CatalogRepo:
     def __init__(self, pool: asyncpg.Pool):
-        """Stores the pool for the one query this repo ever runs.
-
-        Takes: pool - the shared connection pool.
-        Returns: nothing.
-        """
         self._pool = pool
-        self._by_sku: dict[str, CatalogEntry] = {}
+        self._by_sku: dict[str, CatalogEntry] = {}   # filled by load()
 
-    # Called once, from main.py's lifespan, before the app serves traffic.
     async def load(self) -> None:
-        """Reads the whole catalog table into memory.
-
-        Takes: nothing.
-        Returns: nothing - fills this repo's internal dict.
-        """
+        """Reads the whole catalog into memory. Call once, at startup."""
         rows = await self._pool.fetch("SELECT sku, name, price FROM catalog")
-        # Postgres NUMERIC arrives as Decimal. Casting to float once here is
-        # what keeps the rest of the app from doing it at every call site,
-        # which week 1 had to do in about eight places.
         self._by_sku = {
+            # float() here, so prices leave the data layer as plain numbers.
             row["sku"]: CatalogEntry(row["sku"], row["name"], float(row["price"]))
             for row in rows
         }
 
-    # Deliberately not async: this is a dict lookup, not a database call.
-    # The scan path hits this on every single scanned item, so keeping it a
-    # plain function avoids creating a coroutine roughly 1,200 times a second.
+    # Not async on purpose: this reads memory, not the database. Every scan
+    # calls it, so it should not pretend to be something that waits.
     def get(self, sku: str) -> CatalogEntry | None:
-        """Looks up one item by SKU.
-
-        Takes: sku - the scanned barcode.
-        Returns: the CatalogEntry, or None if no such SKU exists.
-        """
+        """Looks up one item. Returns None if the SKU does not exist."""
         return self._by_sku.get(sku)
 
     def all(self) -> list[CatalogEntry]:
-        """Returns every catalog entry, for GET /items.
-
-        Takes: nothing.
-        Returns: a list of every CatalogEntry, in insertion order.
-        """
+        """Returns every catalog entry, for GET /items."""
         return list(self._by_sku.values())

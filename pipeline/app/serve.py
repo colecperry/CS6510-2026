@@ -12,11 +12,10 @@ from hypercorn.protocol import h11 as hypercorn_h11
 from app.main import app
 
 
-# The Java load client offers to upgrade every request to HTTP/2. If
-# hypercorn accepts, the client switches protocol and then collapses under
-# sustained load with stream-limit errors and timeouts. Plain HTTP/1.1
-# handles the same concurrency without trouble, so we refuse the offer.
-# Hypercorn has no config flag for this, hence patching the method.
+# The test client asks to switch to a newer version of HTTP on every
+# request. Accepting makes it collapse under load, so we say no and stay on
+# the older one, which handles the same traffic fine. There is no setting
+# for this, so the check is replaced by hand below.
 async def _refuse_h2c_upgrade(self, event: h11.Request) -> None:
     if event.method == b"PRI" and event.target == b"*" and event.http_version == b"2.0":
         raise hypercorn_h11.H2ProtocolAssumedError(
@@ -24,10 +23,10 @@ async def _refuse_h2c_upgrade(self, event: h11.Request) -> None:
         )
 
 
-hypercorn_h11.H11Protocol._check_protocol = _refuse_h2c_upgrade
+hypercorn_h11.H11Protocol._check_protocol = _refuse_h2c_upgrade   # the swap
 
 config = Config()
-config.bind = ["0.0.0.0:8080"]
+config.bind = ["0.0.0.0:8080"]   # all network interfaces, port 8080
 
 if __name__ == "__main__":
     asyncio.run(serve(app, config))

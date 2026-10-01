@@ -1,4 +1,6 @@
 # GET /analytics/popular-items - the current most-scanned ranking.
+#
+# Only reads. The ranking itself is built in the background by the pipeline.
 from fastapi import APIRouter
 
 from app.api import wiring
@@ -9,4 +11,4 @@ router = APIRouter()
 
 @router.get("/analytics/popular-items")
 async def get_popular_items(limit: int = 10) -> PopularItemsResponse:
-    return await wiring.analytics.popular_items(limit)
+    return await wiring.analytics.popular_items(limit)   # ?limit=N, default 10
