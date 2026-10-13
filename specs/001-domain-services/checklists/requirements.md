@@ -1,0 +1,44 @@
+# Specification Quality Checklist: Service-Based Self-Checkout
+
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-10-13
+**Feature**: [spec.md](../spec.md)
+
+## Content Quality
+
+- [x] No implementation details (languages, frameworks, APIs)
+- [x] Focused on user value and business needs
+- [x] Written for non-technical stakeholders
+- [x] All mandatory sections completed
+
+## Requirement Completeness
+
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [x] Requirements are testable and unambiguous
+- [x] Success criteria are measurable
+- [x] Success criteria are technology-agnostic (no implementation details)
+- [x] All acceptance scenarios are defined
+- [x] Edge cases are identified
+- [x] Scope is clearly bounded
+- [x] Dependencies and assumptions identified
+
+## Feature Readiness
+
+- [x] All functional requirements have clear acceptance criteria
+- [x] User scenarios cover primary flows
+- [x] Feature meets measurable outcomes defined in Success Criteria
+- [x] No implementation details leak into specification
+
+## Notes
+
+Resolved during validation, across two iterations:
+
+- **Technology leaked into the first draft.** Service names, port numbers, and a count of three services were all present. Removed: naming the services is a planning decision, and the spec now says only that the system is divided by business function. FR-008 requires the list to exist in the submission without fixing what it contains.
+- **Success criteria were written in milliseconds.** SC-001 originally quoted a p95 latency target. Rewritten as "without a perceptible wait", with the measurement left to the plan. SC-003 similarly now refers to the previous implementation's error rate rather than naming a number.
+- **"The gateway question" was initially an unstated assumption.** The load client can only target one address, which forces an entry point in front of the services, and that sits close to the rule forbidding service-to-service calls. Rather than leave it buried, it is now the first entry under Assumptions, with the reasoning the submission will need to make.
+- **No [NEEDS CLARIFICATION] markers were used.** Three candidates were considered and resolved from existing repository context rather than asked: the number of services (left open, a planning decision), whether the previous weeks may be modified (no, the constitution forbids it), and whether containerisation is required (the brief says "whatever works", so local processes suffice). All three are recorded under Assumptions.
+
+Remaining judgement calls for `/speckit-clarify` to probe:
+
+- Whether "no service calls another service" should also forbid the entry point from calling services, which would make the single-address requirement unsatisfiable. The spec assumes not.
+- How much reporting lag is acceptable, stated qualitatively rather than as a number.
