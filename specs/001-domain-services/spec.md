@@ -8,6 +8,14 @@
 
 **Input**: User description: "Add a service-based implementation of the self-checkout system in a new service-based/ folder, alongside the existing monolith/, layered/ and pipeline/ weeks. The system must be split into separate domain services, divided by business function. Each service is its own independently deployable unit, started and stopped on its own. All services share a single centralised database. Services must not communicate with each other directly. Where two services need the same information, they coordinate through the shared database rather than by calling each other. The existing API contract does not change: the same seven endpoints, the same request and response shapes, the same error codes. The load client is unchanged and still points at a single address. The deliverable is the list of services defined, plus two load-client JSON reports from the default and stress parameter sets."
 
+## Clarifications
+
+### Session 2026-10-13
+
+- Q: Does the rule that services must not communicate directly also forbid a thin entry point that receives every request and forwards it to the service that owns it? → A: Allowed. It is the caller-facing tier, not a domain service, and the rule is read as forbidding one domain service from calling another.
+- Q: How finely should the system be divided into domain services? → A: Three, one per business function: selling, stock, and reporting.
+- Q: Is there a point at which a latency regression forces a design change rather than simply being reported? → A: No. Any slowdown is accepted and reported. The design changes only if the system fails: errors appear, the stock invariant breaks, or a run cannot finish.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The users here are the course grader, who reads the submission and runs the load client, and the student maintaining six parallel implementations of one system.
@@ -103,9 +111,13 @@ Someone with the repository can start the system, run the load client twice, and
 
 **The service split**
 
-- **FR-003**: The system MUST be divided into separate services, each owning one business function.
+- **FR-003**: The system MUST be divided into three services, each owning one business function:
+  - **Selling**: opening a basket, adding items to it, paying for it, and looking one up.
+  - **Stock**: what the shop sells, and which items are running low.
+  - **Reporting**: which items are being scanned most often.
 - **FR-004**: Each service MUST be independently deployable: startable and stoppable on its own, without requiring another service to be running in order to serve its own requests.
-- **FR-005**: No service MAY send a request to another service. Where two services need the same information, they MUST coordinate through the shared database.
+- **FR-005**: No domain service MAY send a request to another domain service. Where two services need the same information, they MUST coordinate through the shared database.
+- **FR-005a**: A single entry point MUST receive every incoming request and forward it to the service that owns it, so that callers see one address. This entry point is the caller-facing tier, not a domain service: it MUST hold no business rules and MUST NOT read or write the database. Its existence does not count as service-to-service communication.
 - **FR-006**: All services MUST use one centralised database.
 - **FR-007**: Data access logic needed by more than one service MUST have a single definition, rather than being independently reimplemented per service.
 - **FR-008**: The submission MUST list the services defined and what business function each owns.
@@ -147,7 +159,7 @@ Someone with the repository can start the system, run the load client twice, and
 
 ### Measurable Outcomes
 
-- **SC-001**: A shopper can scan an item and see the updated basket without a perceptible wait, at both the normal and the heavy load levels used in previous weeks.
+- **SC-001**: A shopper can scan an item and see the updated basket without a perceptible wait, at both the normal and the heavy load levels used in previous weeks. No latency figure can fail this week on its own: the measured cost of splitting the system is a result to be reported and compared against the previous implementations, not a threshold to pass.
 - **SC-002**: Under the normal load level, every request succeeds. Zero errors.
 - **SC-003**: Under the heavy load level, the error rate stays at or below the level recorded by the previous implementation, and any errors are explained with evidence rather than assumed benign.
 - **SC-004**: After every run, stock sold equals stock reduced for every item, with no unexplained discrepancy and nothing below zero.
@@ -158,10 +170,10 @@ Someone with the repository can start the system, run the load client twice, and
 
 ## Assumptions
 
-- **The gateway question.** The load client can only be pointed at one address, so something must receive every request and direct it to the service that owns it. This entry point is assumed to be permitted: it is the caller-facing tier that a service-based architecture normally has in front of its domain services, not one domain service calling another. It is assumed to hold no business logic, and the submission will state this reasoning rather than leave it implicit.
+- **The entry point is settled, not assumed.** See Clarifications and FR-005a. The load client can only be pointed at one address, so an entry point is required. It is treated as the caller-facing tier rather than a domain service, and the submission will state that reasoning explicitly rather than leave it implicit.
 - **Scope.** The three existing implementations are not modified. This is an addition.
 - **Comparability.** The load parameters, starting data, and database schema match the previous weeks, so measured differences are attributable to the architecture.
 - **Reporting may lag.** Inventory counts must be exact; the popular-items ranking may be slightly behind. The previous implementations already recalculated only periodically, so some staleness is pre-existing and accepted. Any additional lag introduced by the split will be stated.
 - **Shared tables are expected.** Because services coordinate through the database rather than by calling each other, more than one service reading or writing the same table is the intended mechanism, not a design fault.
-- **Performance may regress.** Directing every request through an entry point, and splitting work across processes, is expected to cost latency. The result is a finding to be measured and reported, not a failure condition, provided correctness holds.
+- **Performance may regress, and that is accepted.** See Clarifications. Directing every request through an entry point, and splitting work across processes, is expected to cost latency. The result is a finding to be measured and reported. The design is revisited only if the system fails outright: errors appear, the stock invariant breaks, or a run cannot finish.
 - **Deployment target.** Services run as separate local processes on one machine. Containerising each is out of scope; the requirement is that each is independently startable, not that it ships as an image.
