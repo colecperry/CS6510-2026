@@ -1,0 +1,28 @@
+# The selling service: opening a basket, scanning into it, taking payment.
+#
+# Started on its own with: uv run --directory checkout python -m app.serve Not an installable package, so each service can call its own code `app` without the four of them colliding in one environment.
+[project]
+name = "checkout"
+version = "0.1.0"
+description = "Selling: baskets, scanning, payment"
+requires-python = ">=3.12"
+dependencies = [
+    "common",
+    # Pinned to week 4's resolved versions, not floors. See common/.
+    "fastapi==0.142.1",
+    "hypercorn==0.18.0",
+    # Pinned exactly, as in every previous week. Starlette sits under FastAPI on every request, so drift here would show up as a latency difference that has nothing to do with the architecture.
+    "starlette==1.6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+common = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Run from this service's own directory, so `app` means this service's code. All four services call their code `app`, so a shared path would be ambiguous.
+pythonpath = ["."]
+asyncio_mode = "auto"

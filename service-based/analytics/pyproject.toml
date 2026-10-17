@@ -1,0 +1,29 @@
+# The reporting service: which items are being scanned most often.
+#
+# Also runs the background rebuild, which polls the shared database because the selling service is not allowed to tell it a scan happened.
+#
+# Started on its own with: uv run --directory analytics python -m app.serve
+[project]
+name = "analytics"
+version = "0.1.0"
+description = "Reporting: the most-scanned ranking and the work that rebuilds it"
+requires-python = ">=3.12"
+dependencies = [
+    "common",
+    # Pinned to week 4's resolved versions, not floors. See common/.
+    "fastapi==0.142.1",
+    "hypercorn==0.18.0",
+    "starlette==1.6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+common = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Run from this service's own directory, so `app` means this service's code. All four services call their code `app`, so a shared path would be ambiguous.
+pythonpath = ["."]
+asyncio_mode = "auto"

@@ -1,0 +1,22 @@
+# The front door. Receives every request and forwards it to the service that owns the path, so callers see one address.
+#
+# Deliberately does NOT depend on `common`: it holds no business rules and opens no database connection, so it has nothing to share with the services.
+# That absence is the design, not an oversight.
+#
+# Started on its own with: uv run --directory gateway python -m app.serve
+[project]
+name = "gateway"
+version = "0.1.0"
+description = "Entry point: routes each request to the service that owns it"
+requires-python = ">=3.12"
+dependencies = [
+    # Pinned to week 4's resolved versions, not floors. See common/.
+    "fastapi==0.142.1",
+    "hypercorn==0.18.0",
+    "starlette==1.6.0",
+    # The only dependency no other member has: something to forward with.
+    "httpx>=0.28.0",
+]
+
+[tool.uv]
+package = false

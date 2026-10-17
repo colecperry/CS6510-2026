@@ -1,0 +1,27 @@
+# Workspace root. Not a package itself, just the thing that ties the five members together so they all resolve to one set of library versions.
+#
+# Each member is its own project with its own dependencies and its own entry point, so each can be started on its own. The single lockfile is what stops them drifting onto different versions of the same library mid-week.
+[project]
+name = "service-based"
+version = "0.1.0"
+description = "Week 5: self-checkout split into domain services over one shared database"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["common", "gateway", "checkout", "inventory", "analytics"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Only cross-service tests live here. Each service runs its own from its own directory, because all four call their code `app`.
+pythonpath = ["."]
+asyncio_mode = "auto"

@@ -1,0 +1,27 @@
+# The stock service: what the shop sells, and what is running low.
+#
+# Started on its own with: uv run --directory inventory python -m app.serve
+[project]
+name = "inventory"
+version = "0.1.0"
+description = "Stock: the product list and low-stock alerts"
+requires-python = ">=3.12"
+dependencies = [
+    "common",
+    # Pinned to week 4's resolved versions, not floors. See common/.
+    "fastapi==0.142.1",
+    "hypercorn==0.18.0",
+    "starlette==1.6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+common = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Run from this service's own directory, so `app` means this service's code. All four services call their code `app`, so a shared path would be ambiguous.
+pythonpath = ["."]
+asyncio_mode = "auto"

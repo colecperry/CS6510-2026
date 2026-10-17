@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    # One name per week, so all four can exist at once. Container names are global to the Docker daemon, so reusing another week's name would make whichever started second fail outright.
+    container_name: self-checkout-db-services
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    # Host port 5436: 5432 is any local Postgres install, then one per week, 5433 through 5435.
+    ports:
+      - "5436:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Unchanged from the previous weeks. Three services now share this allowance rather than one process taking it all; see .env.example.
+    command: postgres -c max_connections=200
+
+volumes:
+  pgdata:
