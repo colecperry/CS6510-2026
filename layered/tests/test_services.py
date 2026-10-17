@@ -1,9 +1,6 @@
-# Tests for the checkout and reporting rules, with no database and no web
-# server involved.
+# Tests for the checkout and reporting rules, with no database and no web server involved.
 #
-# This is what the layering buys: the services take their repositories as
-# arguments, so a test can pass stand-ins that hold data in plain Python
-# and assert on the rules alone. These run in milliseconds.
+# This is what the layering buys: the services take their repositories as arguments, so a test can pass stand-ins that hold data in plain Python and assert on the rules alone. These run in milliseconds.
 import pytest
 
 from app.analytics.service import AnalyticsService

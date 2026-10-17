@@ -1,7 +1,6 @@
 # The reporting rules: what counts as popular, and what counts as low stock.
 #
-# Knows nothing about HTTP and writes no SQL. The API layer calls these
-# methods; the transactions layer calls record_scan() on every scan.
+# Knows nothing about HTTP and writes no SQL. The API layer calls these methods; the transactions layer calls record_scan() on every scan.
 from datetime import datetime, timezone
 
 from app.data.analytics_repo import AnalyticsRepo, PopularItemRow
@@ -31,9 +30,7 @@ class AnalyticsService:
         """Logs a scan, and rebuilds the ranking when enough have piled up."""
         seq = await self._analytics.log_scan(sku)
 
-        # Rebuilding on every scan would be wasteful, so it happens once
-        # every slide_interval scans. This call returns None for the other
-        # 499 out of 500, which is the normal, cheap path.
+        # Rebuilding on every scan would be wasteful, so it happens once every slide_interval scans. This call returns None for the other 499 out of 500, which is the normal, cheap path.
         window = await self._analytics.claim_recompute(seq)
         if window is None:
             return
@@ -74,8 +71,7 @@ class AnalyticsService:
         effective = threshold if threshold is not None else self._low_stock_threshold
         rows = await self._analytics.below_threshold(effective)
 
-        # Worked out fresh each request rather than stored, so there is no
-        # alert history to keep in step with actual stock.
+        # Worked out fresh each request rather than stored, so there is no alert history to keep in step with actual stock.
         now = datetime.now(timezone.utc)
         return LowStockResponse(
             threshold=effective,

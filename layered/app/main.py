@@ -1,8 +1,6 @@
 # Builds the running application by assembling the four layers.
 #
-# This is the only file that knows how the layers fit together: it opens the
-# database, constructs each repository, hands those to the services, and
-# mounts the routes on top. Everything else just uses what it is given.
+# This is the only file that knows how the layers fit together: it opens the database, constructs each repository, hands those to the services, and mounts the routes on top. Everything else just uses what it is given.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -22,8 +20,7 @@ from app.transactions.service import TransactionService
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Runs setup before the first request, and cleanup after the last."""
-    # Everything before `yield` happens at startup, everything after it at
-    # shutdown.
+    # Everything before `yield` happens at startup, everything after it at shutdown.
     pool = await create_pool()
 
     # Bottom layer first: the repositories, each handed the pool.
@@ -32,8 +29,7 @@ async def lifespan(app: FastAPI):
     transactions_repo = TransactionsRepo(pool)
     analytics_repo = AnalyticsRepo(pool)
 
-    # Then the services, each handed the repositories it needs. Transactions
-    # depends on analytics because every scan feeds the popularity window.
+    # Then the services, each handed the repositories it needs. Transactions depends on analytics because every scan feeds the popularity window.
     analytics_service = AnalyticsService(
         analytics_repo,
         catalog_repo,

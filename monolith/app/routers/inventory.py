@@ -13,8 +13,7 @@ router = APIRouter()
 @router.get("/inventory/low-stock")
 async def get_low_stock(threshold: int | None = None) -> LowStockResponse:
     """Lists every item currently below a stock threshold, lowest first."""
-    # The ?threshold= query parameter wins if given, otherwise fall back to
-    # the configured default.
+    # The ?threshold= query parameter wins if given, otherwise fall back to the configured default.
     effective_threshold = threshold if threshold is not None else settings.low_stock_default_threshold
 
     rows = await pool_module.pool.fetch(
@@ -28,8 +27,7 @@ async def get_low_stock(threshold: int | None = None) -> LowStockResponse:
         effective_threshold,
     )
 
-    # Alerts are worked out fresh on each request rather than stored, so
-    # there is no history table to keep in step with actual stock.
+    # Alerts are worked out fresh on each request rather than stored, so there is no history table to keep in step with actual stock.
     now = datetime.now(timezone.utc)
     alerts = [
         LowStockAlert(

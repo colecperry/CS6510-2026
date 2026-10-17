@@ -1,8 +1,6 @@
-# The checkout rules: what may be scanned, what may be paid for, and what
-# the customer is told when the answer is no.
+# The checkout rules: what may be scanned, what may be paid for, and what the customer is told when the answer is no.
 #
-# Knows nothing about HTTP and writes no SQL. It raises the errors in
-# app/errors.py and leaves the API layer to turn those into responses.
+# Knows nothing about HTTP and writes no SQL. It raises the errors in app/errors.py and leaves the API layer to turn those into responses.
 from app.analytics.service import AnalyticsService
 from app.data.catalog_repo import CatalogRepo
 from app.data.transactions_repo import TransactionsRepo
@@ -40,8 +38,7 @@ class TransactionService:
 
     async def start(self, station_id: str) -> Transaction:
         """Opens a new empty basket for a station."""
-        # Checked here rather than by pydantic, so a blank station gets our
-        # own error shape instead of the framework's.
+        # Checked here rather than by pydantic, so a blank station gets our own error shape instead of the framework's.
         cleaned = station_id.strip()
         if not cleaned:
             raise InvalidRequestError("INVALID_REQUEST", "stationId is required")

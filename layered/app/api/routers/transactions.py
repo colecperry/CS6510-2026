@@ -1,7 +1,6 @@
 # The four checkout endpoints.
 #
-# Each one reads the request, hands it to the transactions layer, and
-# returns what comes back. No rules and no SQL live here.
+# Each one reads the request, hands it to the transactions layer, and returns what comes back. No rules and no SQL live here.
 from fastapi import APIRouter
 
 from app.api import wiring

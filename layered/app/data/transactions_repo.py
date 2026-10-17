@@ -1,8 +1,7 @@
 # All SQL for the transactions and transaction_items tables.
 #
 # The transactions layer calls these methods and never writes SQL itself.
-# Every check that guards a write is folded into the writing statement, so
-# two checkouts racing on the same basket cannot both win.
+# Every check that guards a write is folded into the writing statement, so two checkouts racing on the same basket cannot both win.
 from datetime import datetime
 from typing import NamedTuple
 
@@ -55,8 +54,7 @@ class TransactionsRepo:
 
     async def start(self, station_id: str) -> TransactionRow:
         """Creates a new empty basket and returns it."""
-        # RETURNING hands back the generated id and column defaults, so there
-        # is no second query to read the row we just wrote.
+        # RETURNING hands back the generated id and column defaults, so there is no second query to read the row we just wrote.
         row = await self._pool.fetchrow(
             """
             INSERT INTO transactions (station_id)
@@ -69,8 +67,7 @@ class TransactionsRepo:
 
     async def bump_counters(self, transaction_id: str, unit_price: float) -> ScanCounters | None:
         """Adds one item to the basket's totals. None if it was not open."""
-        # "Still open?" is part of the UPDATE, not a separate SELECT, so no
-        # other request can close the basket between the check and the write.
+        # "Still open?" is part of the UPDATE, not a separate SELECT, so no other request can close the basket between the check and the write.
         row = await self._pool.fetchrow(
             """
             UPDATE transactions
@@ -87,9 +84,7 @@ class TransactionsRepo:
 
     async def state_of(self, transaction_id: str) -> TransactionState | None:
         """Reads a basket's status and size. None if there is no such basket."""
-        # Only called after a write was refused, to work out which error to
-        # report. Not on the normal path, so the extra query costs nothing
-        # in the common case.
+        # Only called after a write was refused, to work out which error to report. Not on the normal path, so the extra query costs nothing in the common case.
         row = await self._pool.fetchrow(
             "SELECT status, item_count FROM transactions WHERE transaction_id = $1",
             transaction_id,
@@ -102,8 +97,7 @@ class TransactionsRepo:
         self, transaction_id: str, sku: str, name: str, unit_price: float
     ) -> None:
         """Records one scanned unit. The receipt is built from these rows."""
-        # Name and price are copied in rather than looked up later, so a
-        # receipt always shows what the item cost at the time it was sold.
+        # Name and price are copied in rather than looked up later, so a receipt always shows what the item cost at the time it was sold.
         await self._pool.execute(
             """
             INSERT INTO transaction_items (transaction_id, sku, name, unit_price)
@@ -121,9 +115,7 @@ class TransactionsRepo:
         None if the basket could not be paid for; ask state_of() why.
         """
         async with self._pool.acquire() as conn:
-            # One database transaction around all of it. The basket can
-            # never end up marked paid without the stock coming down, or
-            # the stock come down without the basket being marked paid.
+            # One database transaction around all of it. The basket can never end up marked paid without the stock coming down, or the stock come down without the basket being marked paid.
             async with conn.transaction():
                 # Both rules live in the UPDATE: still open, and not empty.
                 row = await conn.fetchrow(
@@ -150,12 +142,9 @@ class TransactionsRepo:
                     transaction_id,
                 )
 
-                # Always in SKU order. Two checkouts holding the same two
-                # items could otherwise take them in opposite orders and
-                # sit waiting on each other forever.
+                # Always in SKU order. Two checkouts holding the same two items could otherwise take them in opposite orders and sit waiting on each other forever.
                 #
-                # GREATEST(..., 0) because the contract has no "out of
-                # stock" response, so a hot item floors at zero instead.
+                # GREATEST(..., 0) because the contract has no "out of stock" response, so a hot item floors at zero instead.
                 for line in line_rows:
                     await conn.execute(
                         "UPDATE stock SET qty = GREATEST(qty - $2, 0) WHERE sku = $1",
@@ -163,8 +152,7 @@ class TransactionsRepo:
                         line["quantity"],
                     )
 
-        # Built after the connection is handed back, so the basket's rows
-        # are not held any longer than the writes need.
+        # Built after the connection is handed back, so the basket's rows are not held any longer than the writes need.
         return CompletedTransaction(
             station_id=row["station_id"],
             item_count=row["item_count"],

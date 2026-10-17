@@ -1,7 +1,6 @@
 # The only place in the project that knows HTTP status codes exist.
 #
-# The business layers raise plain domain errors; this turns each kind into
-# the right status code and the {error, message} body the contract requires.
+# The business layers raise plain domain errors; this turns each kind into the right status code and the {error, message} body the contract requires.
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 

@@ -1,7 +1,6 @@
 # The reporting rules: what counts as popular, and what counts as low stock.
 #
-# Knows nothing about HTTP and writes no SQL. Reading a ranking happens here;
-# building one happens in pipeline.py, which this hands scans to.
+# Knows nothing about HTTP and writes no SQL. Reading a ranking happens here; building one happens in pipeline.py, which this hands scans to.
 from datetime import datetime, timezone
 
 from app.analytics.pipeline import AnalyticsPipeline
@@ -27,8 +26,7 @@ class AnalyticsService:
 
     def record_scan(self, sku: str) -> None:
         """Hands a scan to the pipeline. Not async: nothing is waited on."""
-        # Everything this used to do - the write, the rebuild check, the
-        # ranking - now happens in the background instead of here.
+        # Everything this used to do - the write, the rebuild check, the ranking - now happens in the background instead of here.
         self._pipeline.submit(sku)
 
     async def popular_items(self, limit: int) -> PopularItemsResponse:
@@ -52,8 +50,7 @@ class AnalyticsService:
         effective = threshold if threshold is not None else self._low_stock_threshold
         rows = await self._analytics.below_threshold(effective)
 
-        # Worked out fresh each request rather than stored, so there is no
-        # alert history to keep in step with actual stock.
+        # Worked out fresh each request rather than stored, so there is no alert history to keep in step with actual stock.
         now = datetime.now(timezone.utc)
         return LowStockResponse(
             threshold=effective,

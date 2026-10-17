@@ -1,7 +1,6 @@
 # The shape of every request and response body the API accepts or returns.
 #
-# Defined once here and shared by all four layers, so the wire format lives
-# in one place. Mirrors spec/self-checkout-openapi.yaml.
+# Defined once here and shared by all four layers, so the wire format lives in one place. Mirrors spec/self-checkout-openapi.yaml.
 from datetime import datetime
 from typing import Literal
 
@@ -26,9 +25,7 @@ class CatalogResponse(ApiModel):
 
 
 class StartTransactionRequest(ApiModel):
-    # Optional here even though the contract requires it. If pydantic
-    # rejected a blank value we would return FastAPI's 422, which is the
-    # wrong error shape, so the transactions layer checks it instead.
+    # Optional here even though the contract requires it. If pydantic rejected a blank value we would return FastAPI's 422, which is the wrong error shape, so the transactions layer checks it instead.
     station_id: str = ""
 
 

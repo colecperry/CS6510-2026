@@ -1,8 +1,6 @@
 # The only place that reads the catalog table.
 #
-# Item names and prices are needed on every scan, so the whole catalog is
-# loaded into memory at startup and served from there. Nothing in the API
-# can change the catalog, so that copy can never go stale.
+# Item names and prices are needed on every scan, so the whole catalog is loaded into memory at startup and served from there. Nothing in the API can change the catalog, so that copy can never go stale.
 from typing import NamedTuple
 
 import asyncpg
@@ -29,8 +27,7 @@ class CatalogRepo:
             for row in rows
         }
 
-    # Not async on purpose: this reads memory, not the database. Every scan
-    # calls it, so it should not pretend to be something that waits.
+    # Not async on purpose: this reads memory, not the database. Every scan calls it, so it should not pretend to be something that waits.
     def get(self, sku: str) -> CatalogEntry | None:
         """Looks up one item. Returns None if the SKU does not exist."""
         return self._by_sku.get(sku)

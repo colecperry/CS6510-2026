@@ -1,7 +1,6 @@
 # The checkout itself: start a basket, scan into it, pay, look one up.
 #
-# These four routes carry the money-handling rules, so most of the care in
-# this file goes into never losing or double-counting a stock decrement.
+# These four routes carry the money-handling rules, so most of the care in this file goes into never losing or double-counting a stock decrement.
 from fastapi import APIRouter
 
 import app.catalog_cache as catalog_cache
@@ -23,14 +22,12 @@ router = APIRouter()
 @router.post("/transactions", status_code=201)
 async def start_transaction(body: StartTransactionRequest) -> Transaction:
     """Opens a new, empty basket for a station."""
-    # Checked by hand so a blank stationId returns our own 400 rather than
-    # FastAPI's 422, which is the wrong error shape.
+    # Checked by hand so a blank stationId returns our own 400 rather than FastAPI's 422, which is the wrong error shape.
     station_id = body.station_id.strip()
     if not station_id:
         raise InvalidRequestError("INVALID_REQUEST", "stationId is required")
 
-    # RETURNING gives back the generated id and defaults without a second
-    # query to read the row we just wrote.
+    # RETURNING gives back the generated id and defaults without a second query to read the row we just wrote.
     row = await pool_module.pool.fetchrow(
         """
         INSERT INTO transactions (station_id)
@@ -58,8 +55,7 @@ async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
         raise NotFoundError("UNKNOWN_SKU", f"No such SKU: {body.sku}")
     name, unit_price = cached
 
-    # The "is it still open?" check lives inside the UPDATE rather than in a
-    # separate SELECT, so another request cannot close the basket in between.
+    # The "is it still open?" check lives inside the UPDATE rather than in a separate SELECT, so another request cannot close the basket in between.
     row = await pool_module.pool.fetchrow(
         """
         UPDATE transactions
@@ -109,8 +105,7 @@ async def scan_item(transaction_id: str, body: ScanItemRequest) -> ScanResult:
 async def complete_transaction(transaction_id: str) -> Receipt:
     """Pays for the basket, takes the items out of stock, returns a receipt."""
     async with pool_module.pool.acquire() as conn:
-        # One transaction around everything below, so the basket is never
-        # marked paid without the stock coming down, or the other way round.
+        # One transaction around everything below, so the basket is never marked paid without the stock coming down, or the other way round.
         async with conn.transaction():
             # Both rules checked inside the UPDATE: still open, and not empty.
             row = await conn.fetchrow(
@@ -146,9 +141,7 @@ async def complete_transaction(transaction_id: str) -> Receipt:
                 transaction_id,
             )
 
-            # Always in SKU order. Two checkouts holding the same two items
-            # would otherwise be able to grab them in opposite orders and
-            # deadlock waiting on each other.
+            # Always in SKU order. Two checkouts holding the same two items would otherwise be able to grab them in opposite orders and deadlock waiting on each other.
             for line in lines:
                 await conn.execute(
                     "UPDATE stock SET qty = GREATEST(qty - $2, 0) WHERE sku = $1",

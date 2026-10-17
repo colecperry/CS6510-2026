@@ -1,7 +1,6 @@
 # Starts the web server. Run with: uv run python -m app.serve
 #
-# Use this rather than launching hypercorn directly, because it disables
-# HTTP/2 upgrades first. README.md explains why at length.
+# Use this rather than launching hypercorn directly, because it disables HTTP/2 upgrades first. README.md explains why at length.
 import asyncio
 
 import h11
@@ -12,10 +11,7 @@ from hypercorn.protocol import h11 as hypercorn_h11
 from app.main import app
 
 
-# The test client asks to switch to a newer version of HTTP on every
-# request. Accepting makes it collapse under load, so we say no and stay on
-# the older one, which handles the same traffic fine. There is no setting
-# for this, so the check is replaced by hand below.
+# The test client asks to switch to a newer version of HTTP on every request. Accepting makes it collapse under load, so we say no and stay on the older one, which handles the same traffic fine. There is no setting for this, so the check is replaced by hand below.
 async def _refuse_h2c_upgrade(self, event: h11.Request) -> None:
     if event.method == b"PRI" and event.target == b"*" and event.http_version == b"2.0":
         raise hypercorn_h11.H2ProtocolAssumedError(

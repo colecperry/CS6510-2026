@@ -1,8 +1,7 @@
 # All SQL for the transactions and transaction_items tables.
 #
 # The transactions layer calls these methods and never writes SQL itself.
-# Every check that guards a write is folded into the writing statement, so
-# two checkouts racing on the same basket cannot both win.
+# Every check that guards a write is folded into the writing statement, so two checkouts racing on the same basket cannot both win.
 from datetime import datetime
 from typing import NamedTuple
 
@@ -55,8 +54,7 @@ class TransactionsRepo:
 
     async def start(self, station_id: str) -> TransactionRow:
         """Creates a new empty basket and returns it."""
-        # RETURNING hands back the generated id and column defaults, so there
-        # is no second query to read the row we just wrote.
+        # RETURNING hands back the generated id and column defaults, so there is no second query to read the row we just wrote.
         row = await self._pool.fetchrow(
             """
             INSERT INTO transactions (station_id)
@@ -69,9 +67,7 @@ class TransactionsRepo:
 
     async def bump_counters(self, transaction_id: str, unit_price: float) -> ScanCounters | None:
         """Adds one item to the basket's totals. None if it was not open."""
-        # Checking "is it open?" and updating happen in one statement. Doing
-        # them separately would leave a gap for another request to pay for
-        # the basket in between.
+        # Checking "is it open?" and updating happen in one statement. Doing them separately would leave a gap for another request to pay for the basket in between.
         row = await self._pool.fetchrow(
             """
             UPDATE transactions
@@ -88,9 +84,7 @@ class TransactionsRepo:
 
     async def state_of(self, transaction_id: str) -> TransactionState | None:
         """Reads a basket's status and size. None if there is no such basket."""
-        # Answers "why was that refused?" - missing basket, closed one, or
-        # empty one. Only runs after something already failed, so a normal
-        # scan never pays for it.
+        # Answers "why was that refused?" - missing basket, closed one, or empty one. Only runs after something already failed, so a normal scan never pays for it.
         row = await self._pool.fetchrow(
             "SELECT status, item_count FROM transactions WHERE transaction_id = $1",
             transaction_id,
@@ -103,8 +97,7 @@ class TransactionsRepo:
         self, transaction_id: str, sku: str, name: str, unit_price: float
     ) -> None:
         """Records one scanned unit. The receipt is built from these rows."""
-        # Name and price are copied in rather than looked up later, so a
-        # receipt always shows what the item cost at the time it was sold.
+        # Name and price are copied in rather than looked up later, so a receipt always shows what the item cost at the time it was sold.
         await self._pool.execute(
             """
             INSERT INTO transaction_items (transaction_id, sku, name, unit_price)
@@ -122,9 +115,7 @@ class TransactionsRepo:
         None if the basket could not be paid for; ask state_of() why.
         """
         async with self._pool.acquire() as conn:
-            # Everything inside counts as one all-or-nothing change. A basket
-            # can never end up paid for without the stock coming down, even
-            # if the process dies halfway through.
+            # Everything inside counts as one all-or-nothing change. A basket can never end up paid for without the stock coming down, even if the process dies halfway through.
             async with conn.transaction():
                 # Both rules are in the WHERE: still open, and not empty.
                 row = await conn.fetchrow(
@@ -151,21 +142,16 @@ class TransactionsRepo:
                     transaction_id,
                 )
 
-                # The ORDER BY above matters here: every checkout takes items
-                # in the same order, so two of them buying the same pair can
-                # never end up each holding what the other needs.
+                # The ORDER BY above matters here: every checkout takes items in the same order, so two of them buying the same pair can never end up each holding what the other needs.
                 for line in line_rows:
                     await conn.execute(
-                        # GREATEST stops stock going below zero. The contract
-                        # has no "out of stock" reply, so a sold-out item
-                        # floors at 0 rather than going negative.
+                        # GREATEST stops stock going below zero. The contract has no "out of stock" reply, so a sold-out item floors at 0 rather than going negative.
                         "UPDATE stock SET qty = GREATEST(qty - $2, 0) WHERE sku = $1",
                         line["sku"],
                         line["quantity"],
                     )
 
-        # Built after the connection is handed back, so the basket's rows
-        # are not held any longer than the writes need.
+        # Built after the connection is handed back, so the basket's rows are not held any longer than the writes need.
         return CompletedTransaction(
             station_id=row["station_id"],
             item_count=row["item_count"],

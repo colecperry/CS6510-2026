@@ -10,8 +10,7 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    # Default max_connections (100) is too low for our pool (up to 120,
-    # sized for stress mode's 100 stations) - raised with headroom.
+    # Default max_connections (100) is too low for our pool (up to 120, sized for stress mode's 100 stations) - raised with headroom.
     command: postgres -c max_connections=200
 
 volumes:

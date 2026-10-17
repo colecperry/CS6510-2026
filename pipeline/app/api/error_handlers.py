@@ -1,15 +1,13 @@
 # The only place in the project that knows HTTP status codes exist.
 #
-# The business layers raise plain domain errors; this turns each kind into
-# the right status code and the {error, message} body the contract requires.
+# The business layers raise plain domain errors; this turns each kind into the right status code and the {error, message} body the contract requires.
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.errors import ConflictError, DomainError, InvalidRequestError, NotFoundError
 from app.schemas import ApiError
 
-# The whole mapping. Business code picks the kind of failure; this picks
-# the number the customer's browser sees.
+# The whole mapping. Business code picks the kind of failure; this picks the number the customer's browser sees.
 _STATUS_BY_ERROR = {
     InvalidRequestError: 400,
     NotFoundError: 404,
@@ -25,6 +23,5 @@ async def _handle_domain_error(request: Request, exc: DomainError) -> JSONRespon
 
 def register_error_handlers(app: FastAPI) -> None:
     """Wires the handler above onto the app. Call once, at startup."""
-    # After this, any route can just raise one of our errors and the right
-    # response comes out. No route needs a try/except.
+    # After this, any route can just raise one of our errors and the right response comes out. No route needs a try/except.
     app.add_exception_handler(DomainError, _handle_domain_error)

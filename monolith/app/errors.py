@@ -1,8 +1,6 @@
-# Errors the routers raise, and the handler that turns them into the error
-# JSON the contract specifies.
+# Errors the routers raise, and the handler that turns them into the error JSON the contract specifies.
 #
-# main.py calls register_error_handlers() once, so any route can just raise
-# and the right response comes out.
+# main.py calls register_error_handlers() once, so any route can just raise and the right response comes out.
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 

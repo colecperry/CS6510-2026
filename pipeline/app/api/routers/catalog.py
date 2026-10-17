@@ -9,8 +9,7 @@ from app.schemas import CatalogResponse
 router = APIRouter()
 
 
-# Not async, unlike the other routes: this one is served from memory and
-# never waits for anything.
+# Not async, unlike the other routes: this one is served from memory and never waits for anything.
 @router.get("/items")
 def get_items() -> CatalogResponse:
     return wiring.transactions.list_items()

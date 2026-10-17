@@ -1,5 +1,4 @@
-# All SQL for the reporting tables: the scan log, the popularity ranking,
-# and the low-stock view over the stock table.
+# All SQL for the reporting tables: the scan log, the popularity ranking, and the low-stock view over the stock table.
 #
 # The analytics layer calls these methods and never writes SQL itself.
 from datetime import datetime
@@ -44,8 +43,7 @@ class AnalyticsRepo:
 
     async def log_scan(self, sku: str) -> int:
         """Records one scan and returns its position in the global sequence."""
-        # Numbering every scan from one sequence is what makes "the last
-        # 1000 scans" a plain range of numbers later on.
+        # Numbering every scan from one sequence is what makes "the last 1000 scans" a plain range of numbers later on.
         return await self._pool.fetchval(
             "INSERT INTO scan_log (sku) VALUES ($1) RETURNING seq", sku
         )
@@ -55,9 +53,7 @@ class AnalyticsRepo:
 
         Returns the (start, end) of the window the winner should count.
         """
-        # The "is it due?" test is part of the UPDATE, so with 100 stations
-        # scanning at once exactly one of them can win. Everyone else gets
-        # nothing back and moves on.
+        # The "is it due?" test is part of the UPDATE, so with 100 stations scanning at once exactly one of them can win. Everyone else gets nothing back and moves on.
         row = await self._pool.fetchrow(
             """
             UPDATE popularity_state
@@ -93,8 +89,7 @@ class AnalyticsRepo:
     async def publish_ranking(self, ranked: list[PopularItemRow], prune_before: int) -> None:
         """Swaps in a new ranking and drops scans that can never count again."""
         async with self._pool.acquire() as conn:
-            # One transaction, so a reader never catches the ranking
-            # half-replaced.
+            # One transaction, so a reader never catches the ranking half-replaced.
             async with conn.transaction():
                 await conn.execute("DELETE FROM popularity_snapshot")
                 for item in ranked:
@@ -108,8 +103,7 @@ class AnalyticsRepo:
                         item.name,
                         item.scan_count,
                     )
-                # Scans behind the window can never be counted again, so
-                # drop them rather than letting scan_log grow forever.
+                # Scans behind the window can never be counted again, so drop them rather than letting scan_log grow forever.
                 await conn.execute("DELETE FROM scan_log WHERE seq <= $1", prune_before)
 
     async def window_state(self) -> WindowState:
@@ -132,8 +126,7 @@ class AnalyticsRepo:
 
     async def top_items(self, limit: int) -> list[PopularItemRow]:
         """Reads the published ranking, highest first."""
-        # Already ranked and trimmed when it was published, so this just
-        # takes the first few rows.
+        # Already ranked and trimmed when it was published, so this just takes the first few rows.
         rows = await self._pool.fetch(
             "SELECT rank, sku, name, scan_count FROM popularity_snapshot ORDER BY rank LIMIT $1",
             limit,

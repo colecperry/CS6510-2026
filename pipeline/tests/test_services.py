@@ -1,8 +1,6 @@
-# Tests for the checkout rules and the analytics pipeline, with no database
-# and no web server involved.
+# Tests for the checkout rules and the analytics pipeline, with no database and no web server involved.
 #
-# Everything here takes its collaborators as arguments, so a test can pass
-# stand-ins that hold data in plain Python. These run in milliseconds.
+# Everything here takes its collaborators as arguments, so a test can pass stand-ins that hold data in plain Python. These run in milliseconds.
 import asyncio
 
 import pytest
@@ -169,14 +167,12 @@ async def test_scans_are_written_in_one_batch_not_one_at_a_time():
 
 
 async def test_ranking_is_rebuilt_only_when_due():
-    # The window filter only forwards work when the database says a rebuild
-    # is due, which here is only once.
+    # The window filter only forwards work when the database says a rebuild is due, which here is only once.
     repo = FakeAnalyticsRepo(rebuild_due_at={3})
     pipeline = build_pipeline(repo)
     await pipeline.start()
 
-    # One at a time, so each scan becomes its own batch and its own sequence
-    # number. Batched together they would arrive as a single number.
+    # One at a time, so each scan becomes its own batch and its own sequence number. Batched together they would arrive as a single number.
     for _ in range(5):
         pipeline.submit("SKU-1")
         await asyncio.sleep(0)
@@ -186,8 +182,7 @@ async def test_ranking_is_rebuilt_only_when_due():
 
 
 async def test_a_full_queue_drops_scans_rather_than_failing():
-    # Analytics may lose a scan; a checkout may not. submit() must never
-    # raise, whatever state the pipeline is in.
+    # Analytics may lose a scan; a checkout may not. submit() must never raise, whatever state the pipeline is in.
     pipeline = build_pipeline(FakeAnalyticsRepo())
     pipeline._scans._maxsize = 1
     pipeline.submit("SKU-1")

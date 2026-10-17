@@ -1,7 +1,6 @@
 # The four checkout endpoints.
 #
-# Each route is one line: take the request apart, call the transactions
-# layer, return what comes back. Decisions and SQL live below this, not here.
+# Each route is one line: take the request apart, call the transactions layer, return what comes back. Decisions and SQL live below this, not here.
 from fastapi import APIRouter
 
 from app.api import wiring

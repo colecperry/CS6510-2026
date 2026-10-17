@@ -1,8 +1,6 @@
 # Builds the running application by assembling the four layers.
 #
-# This is the only file that knows how the layers fit together: it opens the
-# database, constructs each repository, hands those to the services, and
-# mounts the routes on top. Everything else just uses what it is given.
+# This is the only file that knows how the layers fit together: it opens the database, constructs each repository, hands those to the services, and mounts the routes on top. Everything else just uses what it is given.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -23,8 +21,7 @@ from app.transactions.service import TransactionService
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Runs setup before the first request, and cleanup after the last."""
-    # Everything before `yield` happens at startup, everything after it at
-    # shutdown.
+    # Everything before `yield` happens at startup, everything after it at shutdown.
     pool = await create_pool()
 
     # Bottom layer first: the repositories, each handed the pool.
@@ -33,15 +30,13 @@ async def lifespan(app: FastAPI):
     transactions_repo = TransactionsRepo(pool)
     analytics_repo = AnalyticsRepo(pool)
 
-    # The pipeline, and its three filters running in the background. From
-    # here on, scans are written by these rather than by the request.
+    # The pipeline, and its three filters running in the background. From here on, scans are written by these rather than by the request.
     analytics_pipeline = AnalyticsPipeline(
         analytics_repo, catalog_repo, settings.popularity_snapshot_cap
     )
     await analytics_pipeline.start()
 
-    # Then the services, each handed what it needs. Transactions depends on
-    # analytics because every scan feeds the popular-items ranking.
+    # Then the services, each handed what it needs. Transactions depends on analytics because every scan feeds the popular-items ranking.
     analytics_service = AnalyticsService(
         analytics_repo,
         analytics_pipeline,
@@ -57,8 +52,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Let the filters finish what they are holding before the database goes
-    # away, or queued scans would be lost on every restart.
+    # Let the filters finish what they are holding before the database goes away, or queued scans would be lost on every restart.
     await analytics_pipeline.stop()
     await close_pool(pool)
 

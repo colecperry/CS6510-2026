@@ -1,8 +1,6 @@
-# The checkout rules: what may be scanned, what may be paid for, and what
-# the customer is told when the answer is no.
+# The checkout rules: what may be scanned, what may be paid for, and what the customer is told when the answer is no.
 #
-# Knows nothing about HTTP and writes no SQL. It raises the errors in
-# app/errors.py and leaves the API layer to turn those into responses.
+# Knows nothing about HTTP and writes no SQL. It raises the errors in app/errors.py and leaves the API layer to turn those into responses.
 from app.analytics.service import AnalyticsService
 from app.data.catalog_repo import CatalogRepo
 from app.data.transactions_repo import TransactionsRepo
@@ -40,8 +38,7 @@ class TransactionService:
 
     async def start(self, station_id: str) -> Transaction:
         """Opens a new empty basket for a station."""
-        # Checked by hand rather than by the request model, so a blank
-        # station gets our error shape instead of the framework's.
+        # Checked by hand rather than by the request model, so a blank station gets our error shape instead of the framework's.
         cleaned = station_id.strip()
         if not cleaned:
             raise InvalidRequestError("INVALID_REQUEST", "stationId is required")
@@ -61,8 +58,7 @@ class TransactionService:
 
         await self._transactions.add_line(transaction_id, sku, entry.name, entry.price)
 
-        # Feeds the popular-items ranking. No await: this hands the scan to a
-        # background pipeline and returns, so the customer does not wait.
+        # Feeds the popular-items ranking. No await: this hands the scan to a background pipeline and returns, so the customer does not wait.
         self._analytics.record_scan(sku)
 
         return ScanResult(
@@ -112,8 +108,7 @@ class TransactionService:
 
         Only runs after something already failed, never on the happy path.
         """
-        # The database only says no, not why. This asks the follow-up
-        # question and picks the message the customer should see.
+        # The database only says no, not why. This asks the follow-up question and picks the message the customer should see.
         state = await self._transactions.state_of(transaction_id)
         if state is None:
             return NotFoundError("NOT_FOUND", f"No such transaction: {transaction_id}")
