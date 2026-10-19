@@ -11,13 +11,13 @@ Stack: Python 3.12 + FastAPI + PostgreSQL, using raw SQL via `asyncpg`
 All 7 endpoints from the spec are implemented, and both required load-test
 runs pass at a 0.00% error rate.
 
-| | Default (10 stations, 60s) | Stress (100 stations, 120s) |
-|---|---|---|
-| Transactions | 5,905 (98.3/sec) | 14,085 (117.0/sec) |
-| Items scanned | 62,027 (1,032.6/sec) | 147,182 (1,222.2/sec) |
-| Error rate | 0.00% | 0.00% |
-| SCAN_ITEM p95 | 9.68ms | 18.39ms |
-| COMPLETE_TRANSACTION p95 | 21.48ms | 2,722.91ms |
+|                          | Default (10 stations, 60s) | Stress (100 stations, 120s) |
+|--------------------------|----------------------------|-----------------------------|
+| Transactions             | 5,905 (98.3/sec)           | 14,085 (117.0/sec)          |
+| Items scanned            | 62,027 (1,032.6/sec)       | 147,182 (1,222.2/sec)       |
+| Error rate               | 0.00%                      | 0.00%                       |
+| SCAN_ITEM p95            | 9.68ms                     | 18.39ms                     |
+| COMPLETE_TRANSACTION p95 | 21.48ms                    | 2,722.91ms                  |
 
 Raw reports are in `reports/`.
 Analysis of these numbers, and the design trade-offs behind them, is in

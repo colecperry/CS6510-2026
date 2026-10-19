@@ -58,6 +58,7 @@ async def forward(full_path: str, request: Request) -> Response:
 
     # Returned as received. Hop-by-hop headers are dropped because they describe this connection, not the response, and passing them on confuses the caller.
     drop = {"content-encoding", "content-length", "transfer-encoding", "connection"}
+    
     return Response(
         content=upstream.content,
         status_code=upstream.status_code,

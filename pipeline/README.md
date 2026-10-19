@@ -17,11 +17,11 @@ Built on [week 2's layered implementation](../layered), which is otherwise uncha
 scan -> [ingest] -> [window] -> [ranker] -> published ranking
 ```
 
-| Filter | Purpose |
-|---|---|
+| Filter     | Purpose                                                                                                             |
+|------------|---------------------------------------------------------------------------------------------------------------------|
 | **ingest** | Buffers incoming scans and writes them to `scan_log` in batches, emitting the highest sequence number it just used. |
-| **window** | Decides whether enough scans have passed for a new ranking, and if so emits the stretch of scans to count. |
-| **ranker** | Counts scans per item inside that stretch, publishes the new ranking, and prunes scans too old to count again. |
+| **window** | Decides whether enough scans have passed for a new ranking, and if so emits the stretch of scans to count.          |
+| **ranker** | Counts scans per item inside that stretch, publishes the new ranking, and prunes scans too old to count again.      |
 
 **The pipes are Python `asyncio.Queue` objects**, one between each pair of filters.
 Each filter is an `asyncio` task running a loop: take from the pipe behind it, do one job, put the result in the pipe in front.
@@ -29,11 +29,11 @@ No filter calls another, which is what makes them separate pieces rather than on
 
 What each pipe carries:
 
-| Pipe | Carries | Example |
-|---|---|---|
-| `_scans` | a barcode | `"SKU-000001"` |
-| `_sequences` | how far the stream has got | `600` |
-| `_windows` | the stretch to count | `(0, 600)` |
+| Pipe         | Carries                    | Example        |
+|--------------|----------------------------|----------------|
+| `_scans`     | a barcode                  | `"SKU-000001"` |
+| `_sequences` | how far the stream has got | `600`          |
+| `_windows`   | the stretch to count       | `(0, 600)`     |
 
 Each stage hands on less data and more meaning.
 Raw barcodes become a position in the stream, which becomes a decision about what to count.
@@ -79,25 +79,25 @@ Reports in `reports/`.
 
 ### Default (10 stations, 60s)
 
-| | monolith | layered | pipeline |
-|---|---|---|---|
-| Transactions/sec | 98.3 | 99.7 | **123.6** |
-| Items/sec | 1,032.6 | 1,048.2 | **1,300.9** |
-| SCAN_ITEM p95 | 9.68ms | 9.49ms | **7.10ms** |
-| SCAN_ITEM p99 | 22.02ms | 20.64ms | **13.38ms** |
-| COMPLETE p95 | 21.48ms | 20.95ms | 31.95ms |
-| Error rate | 0.00% | 0.00% | 0.00% |
+|                  | monolith | layered | pipeline    |
+|------------------|----------|---------|-------------|
+| Transactions/sec | 98.3     | 99.7    | **123.6**   |
+| Items/sec        | 1,032.6  | 1,048.2 | **1,300.9** |
+| SCAN_ITEM p95    | 9.68ms   | 9.49ms  | **7.10ms**  |
+| SCAN_ITEM p99    | 22.02ms  | 20.64ms | **13.38ms** |
+| COMPLETE p95     | 21.48ms  | 20.95ms | 31.95ms     |
+| Error rate       | 0.00%    | 0.00%   | 0.00%       |
 
 ### Stress (100 stations, 120s)
 
-| | monolith | layered | pipeline |
-|---|---|---|---|
-| Transactions/sec | 117.0 | 115.8 | **124.5** |
-| Items/sec | 1,222.2 | 1,213.4 | **1,313.7** |
-| SCAN_ITEM p95 | 18.39ms | 19.37ms | **10.88ms** |
-| SCAN_ITEM p99 | 55.45ms | 52.85ms | **36.36ms** |
-| COMPLETE p95 | 2,722.91ms | 2,712.42ms | 2,726.74ms |
-| Error rate | 0.00% | 0.02% | 0.02% |
+|                  | monolith   | layered    | pipeline    |
+|------------------|------------|------------|-------------|
+| Transactions/sec | 117.0      | 115.8      | **124.5**   |
+| Items/sec        | 1,222.2    | 1,213.4    | **1,313.7** |
+| SCAN_ITEM p95    | 18.39ms    | 19.37ms    | **10.88ms** |
+| SCAN_ITEM p99    | 55.45ms    | 52.85ms    | **36.36ms** |
+| COMPLETE p95     | 2,722.91ms | 2,712.42ms | 2,726.74ms  |
+| Error rate       | 0.00%      | 0.02%      | 0.02%       |
 
 ### Reading these numbers
 
@@ -123,10 +123,10 @@ In both runs the pipeline reported zero dropped scans, and the ranking it publis
 
 ### Correctness
 
-| | negative stock | exact | explained by selling out | unexplained |
-|---|---|---|---|---|
-| Default | 0 | 2000 | 0 | 0 |
-| Stress | 0 | 1999 | 1 | 0 |
+|         | negative stock | exact | explained by selling out | unexplained |
+|---------|----------------|-------|--------------------------|-------------|
+| Default | 0              | 2000  | 0                        | 0           |
+| Stress  | 0              | 1999  | 1                        | 0           |
 
 The single non-exact SKU under stress is SKU-000001, the most-scanned item, which sold out and floored at zero.
 The contract defines no insufficient-stock response, so this is the same expected edge case the previous weeks documented.

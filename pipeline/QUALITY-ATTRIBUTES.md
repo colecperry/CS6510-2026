@@ -15,10 +15,10 @@ This is the characteristic week 1 named second in priority, and the one this wee
 
 > Scanning is where the customer feels the system, and it runs ~10x more often than the other operations.
 
-| SCAN_ITEM p95 | monolith | layered | pipeline |
-|---|---|---|---|
-| Default | 9.68ms | 9.49ms | **7.10ms** |
-| Stress | 18.39ms | 19.37ms | **10.88ms** |
+| SCAN_ITEM p95 | monolith | layered | pipeline    |
+|---------------|----------|---------|-------------|
+| Default       | 9.68ms   | 9.49ms  | **7.10ms**  |
+| Stress        | 18.39ms  | 19.37ms | **10.88ms** |
 
 A 25% improvement at default load and 44% under stress, with throughput up 24%.
 
@@ -73,10 +73,10 @@ Stock decrements are still synchronous, still inside one database transaction, s
 
 ### Completion got slower at default load, and I did not predict it
 
-| COMPLETE_TRANSACTION p95 | layered | pipeline |
-|---|---|---|
-| Default | 20.95ms | **31.95ms** |
-| Stress | 2,712.42ms | 2,726.74ms |
+| COMPLETE_TRANSACTION p95 | layered    | pipeline    |
+|--------------------------|------------|-------------|
+| Default                  | 20.95ms    | **31.95ms** |
+| Stress                   | 2,712.42ms | 2,726.74ms  |
 
 A 50% regression at default load, and no change under stress.
 
@@ -125,17 +125,17 @@ Applied to checkout itself it would not be, which is what the assignment means b
 
 ## Part 3: Characteristics, revisited
 
-| Characteristic | Week 2 (layered) | Week 4 (pipeline) |
-|---|---|---|
-| Performance, scan path | 9.49ms p95 | **7.10ms p95**, and 44% better under stress |
-| Performance, completion | 20.95ms p95 | 31.95ms p95, unexplained |
-| Throughput | 99.7 tx/sec | **123.6 tx/sec** |
-| Data integrity | held | held, and one write race removed |
-| Consistency | analytics could lag 499 scans | analytics can lag 499 scans plus queue time |
-| Reliability | a failure meant a failed request | a failure can be silent; filters restart on error |
-| Testability | 7 tests, no database | 9 tests, no database |
-| Maintainability | rules separated from delivery | one more concept to hold: filters and pipes |
-| Availability | single process, single database | unchanged |
+| Characteristic          | Week 2 (layered)                 | Week 4 (pipeline)                                 |
+|-------------------------|----------------------------------|---------------------------------------------------|
+| Performance, scan path  | 9.49ms p95                       | **7.10ms p95**, and 44% better under stress       |
+| Performance, completion | 20.95ms p95                      | 31.95ms p95, unexplained                          |
+| Throughput              | 99.7 tx/sec                      | **123.6 tx/sec**                                  |
+| Data integrity          | held                             | held, and one write race removed                  |
+| Consistency             | analytics could lag 499 scans    | analytics can lag 499 scans plus queue time       |
+| Reliability             | a failure meant a failed request | a failure can be silent; filters restart on error |
+| Testability             | 7 tests, no database             | 9 tests, no database                              |
+| Maintainability         | rules separated from delivery    | one more concept to hold: filters and pipes       |
+| Availability            | single process, single database  | unchanged                                         |
 
 The availability row is unchanged for the same reason as week 2.
 Filters are tasks inside one process, not separate services.
@@ -143,15 +143,15 @@ If the process dies, everything dies with it, and the single point of failure we
 
 ## What the measurements showed
 
-| | Default (10 stations, 60s) | Stress (100 stations, 120s) |
-|---|---|---|
-| Transactions | 7,426 (123.6/sec) | 14,990 (124.5/sec) |
-| Items scanned | 78,167 (1,300.9/sec) | 158,157 (1,313.7/sec) |
-| Error rate | 0.00% | 0.02% (3 client timeouts) |
-| SCAN_ITEM p95 | 7.10ms | 10.88ms |
-| SCAN_ITEM p99 | 13.38ms | 36.36ms |
-| COMPLETE p95 | 31.95ms | 2,726.74ms |
-| Scans dropped by the pipeline | 0 | 0 |
+|                               | Default (10 stations, 60s) | Stress (100 stations, 120s) |
+|-------------------------------|----------------------------|-----------------------------|
+| Transactions                  | 7,426 (123.6/sec)          | 14,990 (124.5/sec)          |
+| Items scanned                 | 78,167 (1,300.9/sec)       | 158,157 (1,313.7/sec)       |
+| Error rate                    | 0.00%                      | 0.02% (3 client timeouts)   |
+| SCAN_ITEM p95                 | 7.10ms                     | 10.88ms                     |
+| SCAN_ITEM p99                 | 13.38ms                    | 36.36ms                     |
+| COMPLETE p95                  | 31.95ms                    | 2,726.74ms                  |
+| Scans dropped by the pipeline | 0                          | 0                           |
 
 The shape has changed from the previous weeks.
 Scanning used to degrade by about 2x between default and stress; it now degrades by 1.5x.

@@ -47,23 +47,23 @@ heavy load.
 The spec describes three business functions. The implementation names them after the URL namespaces
 they own, which matches the previous weeks and avoids a second vocabulary.
 
-| Spec calls it | Directory | Owns |
-|---|---|---|
-| Selling | `checkout/` | the four transaction paths |
-| Stock | `inventory/` | `/items`, `/inventory/low-stock` |
-| Reporting | `analytics/` | `/analytics/popular-items` |
+| Spec calls it | Directory    | Owns                             |
+|---------------|--------------|----------------------------------|
+| Selling       | `checkout/`  | the four transaction paths       |
+| Stock         | `inventory/` | `/items`, `/inventory/low-stock` |
+| Reporting     | `analytics/` | `/analytics/popular-items`       |
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-checked after Phase 1 design.*
 
-| Principle | Gate | Status |
-|---|---|---|
-| I. The Contract Is Fixed | Same seven endpoints, same shapes, load client unmodified | **Pass**. FR-001 and FR-002. The entry point forwards without rewriting, so what the client sees is byte-identical. |
-| II. Weeks Must Stay Comparable | Own folder, own port, finished weeks untouched, versions pinned identically | **Pass**. New `service-based/` folder, database on 5436, nothing else edited. One workspace keeps all four processes on one resolved dependency set, so services cannot drift from each other either. |
-| III. Correctness Before Speed | Stock invariant holds; guards inside the writing statement; inventory exact, analytics may lag | **Pass**. The payment path moves process but not shape: same single transaction, same guard folded into the UPDATE. Analytics lag increases by the polling interval, which the spec permits and the write-up will state. |
-| IV. Evidence, Not Assertion | Two committed reports; figures checked mechanically; regressions reported | **Pass**. FR-019 and FR-020. A latency regression is expected here and the spec forbids fixing it quietly. |
-| V. Readable By Someone Who Has Not Seen It | File headers, self-contained comments, README and QUALITY-ATTRIBUTES, no em dashes | **Pass**. Same documentation set as the previous weeks. |
+| Principle                                  | Gate                                                                                           | Status                                                                                                                                                                                                                   |
+|--------------------------------------------|------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| I. The Contract Is Fixed                   | Same seven endpoints, same shapes, load client unmodified                                      | **Pass**. FR-001 and FR-002. The entry point forwards without rewriting, so what the client sees is byte-identical.                                                                                                      |
+| II. Weeks Must Stay Comparable             | Own folder, own port, finished weeks untouched, versions pinned identically                    | **Pass**. New `service-based/` folder, database on 5436, nothing else edited. One workspace keeps all four processes on one resolved dependency set, so services cannot drift from each other either.                    |
+| III. Correctness Before Speed              | Stock invariant holds; guards inside the writing statement; inventory exact, analytics may lag | **Pass**. The payment path moves process but not shape: same single transaction, same guard folded into the UPDATE. Analytics lag increases by the polling interval, which the spec permits and the write-up will state. |
+| IV. Evidence, Not Assertion                | Two committed reports; figures checked mechanically; regressions reported                      | **Pass**. FR-019 and FR-020. A latency regression is expected here and the spec forbids fixing it quietly.                                                                                                               |
+| V. Readable By Someone Who Has Not Seen It | File headers, self-contained comments, README and QUALITY-ATTRIBUTES, no em dashes             | **Pass**. Same documentation set as the previous weeks.                                                                                                                                                                  |
 
 **Re-check after Phase 1**: still passing. The design introduces no violation, and the Complexity
 Tracking table below is empty.

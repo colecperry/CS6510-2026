@@ -126,12 +126,12 @@ Traffic is heavily skewed: the shopper journey is almost all of it, while the tw
 
 Every `NEEDS CLARIFICATION` from the Technical Context is now answered.
 
-| Unknown | Resolved by |
-|---|---|
-| Starting point | Decision 1 |
-| Entry point technology | Decision 2 |
-| Cross-service coordination mechanism | Decisions 3 and 4 |
-| Shared data access strategy | Decision 5 |
-| Deployment and dependency management | Decision 6 |
-| Connection pool sizing | Decision 7 |
-| Performance targets | Not an unknown: the spec deliberately sets none (SC-001) |
+| Unknown                              | Resolved by                                              |
+|--------------------------------------|----------------------------------------------------------|
+| Starting point                       | Decision 1                                               |
+| Entry point technology               | Decision 2                                               |
+| Cross-service coordination mechanism | Decisions 3 and 4                                        |
+| Shared data access strategy          | Decision 5                                               |
+| Deployment and dependency management | Decision 6                                               |
+| Connection pool sizing               | Decision 7                                               |
+| Performance targets                  | Not an unknown: the spec deliberately sets none (SC-001) |

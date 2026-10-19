@@ -18,15 +18,15 @@ The **internal** one is new: which service owns which endpoint, and how the entr
 
 The entry point matches on the URL path and forwards. It parses nothing else, and holds no rules.
 
-| Method | Path | Owned by |
-|---|---|---|
-| POST | `/transactions` | selling |
-| POST | `/transactions/{id}/items` | selling |
-| POST | `/transactions/{id}/complete` | selling |
-| GET | `/transactions/{id}` | selling |
-| GET | `/items` | stock |
-| GET | `/inventory/low-stock` | stock |
-| GET | `/analytics/popular-items` | reporting |
+| Method | Path                          | Owned by  |
+|--------|-------------------------------|-----------|
+| POST   | `/transactions`               | selling   |
+| POST   | `/transactions/{id}/items`    | selling   |
+| POST   | `/transactions/{id}/complete` | selling   |
+| GET    | `/transactions/{id}`          | selling   |
+| GET    | `/items`                      | stock     |
+| GET    | `/inventory/low-stock`        | stock     |
+| GET    | `/analytics/popular-items`    | reporting |
 
 Longest matching prefix wins, so `/items` and `/inventory/...` route to stock while `/transactions/...` routes to selling, with no overlap between them.
 
@@ -83,11 +83,11 @@ This is worth checking mechanically rather than by eye, since it is the single r
 
 From FR-004 and SC-005: each service answers its own requests with the others stopped.
 
-| Started alone | Should answer | Should fail |
-|---|---|---|
-| selling | the four transaction paths | the other three |
-| stock | `/items`, `/inventory/low-stock` | the other five |
-| reporting | `/analytics/popular-items` | the other six |
+| Started alone | Should answer                    | Should fail     |
+|---------------|----------------------------------|-----------------|
+| selling       | the four transaction paths       | the other three |
+| stock         | `/items`, `/inventory/low-stock` | the other five  |
+| reporting     | `/analytics/popular-items`       | the other six   |
 
 Testable by starting one service and calling it directly, without the entry point.
 If a service only works when another is running, the boundary is in the wrong place.

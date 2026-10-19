@@ -54,10 +54,10 @@ Naming it is worth something.
 
 ### Throughput fell by two thirds
 
-| | pipeline | service-based |
-|---|---|---|
-| Default, transactions/sec | 123.6 | **45.1** |
-| Stress, transactions/sec | 124.5 | **37.6** |
+|                           | pipeline | service-based |
+|---------------------------|----------|---------------|
+| Default, transactions/sec | 123.6    | **45.1**      |
+| Stress, transactions/sec  | 124.5    | **37.6**      |
 
 Every request now crosses an extra process.
 At default load, start and scan each gained about 22ms while completion barely moved, which is the signature of a fixed per-request cost rather than of the service split itself.
@@ -71,12 +71,12 @@ That would be the first thing to do with more time, and until it is done, "the g
 
 ### The stress result inverts, and the reason matters
 
-| Stress, p95 | pipeline | service-based |
-|---|---|---|
-| SCAN_ITEM | 10.88ms | 490.93ms |
-| COMPLETE_TRANSACTION | 2,726.74ms | **486.44ms** |
-| COMPLETE_TRANSACTION p99 | 4,608.61ms | **807.08ms** |
-| Error rate | 0.02% | **0.00%** |
+| Stress, p95              | pipeline   | service-based |
+|--------------------------|------------|---------------|
+| SCAN_ITEM                | 10.88ms    | 490.93ms      |
+| COMPLETE_TRANSACTION     | 2,726.74ms | **486.44ms**  |
+| COMPLETE_TRANSACTION p99 | 4,608.61ms | **807.08ms**  |
+| Error rate               | 0.02%      | **0.00%**     |
 
 Completion got five times faster, and the timeouts that cost weeks 2 and 4 three requests each disappeared.
 
@@ -108,18 +108,18 @@ Now partial availability is possible, which is both a feature and a new thing to
 
 ## Part 3: Characteristics, revisited
 
-| Characteristic | Week 4 (pipeline) | Week 5 (service-based) |
-|---|---|---|
-| Throughput | 123.6 tx/sec | **45.1 tx/sec** |
-| Scan latency, default | 7.10ms p95 | **28.30ms p95** |
-| Completion under stress | 2,726ms p95 | **486ms p95**, by being less busy |
-| Error rate under stress | 0.02% | **0.00%** |
-| Data integrity | held | held, both runs exact |
-| Independent deployability | none | **each service starts alone** |
-| Fault isolation | none | partial: one service down leaves others up |
-| Boundary enforcement | convention | **structural, and tested** |
-| Availability | one process, one database | four processes, one database, two single points of failure |
-| Operational complexity | one command | four processes, scripts, three log files |
+| Characteristic            | Week 4 (pipeline)         | Week 5 (service-based)                                     |
+|---------------------------|---------------------------|------------------------------------------------------------|
+| Throughput                | 123.6 tx/sec              | **45.1 tx/sec**                                            |
+| Scan latency, default     | 7.10ms p95                | **28.30ms p95**                                            |
+| Completion under stress   | 2,726ms p95               | **486ms p95**, by being less busy                          |
+| Error rate under stress   | 0.02%                     | **0.00%**                                                  |
+| Data integrity            | held                      | held, both runs exact                                      |
+| Independent deployability | none                      | **each service starts alone**                              |
+| Fault isolation           | none                      | partial: one service down leaves others up                 |
+| Boundary enforcement      | convention                | **structural, and tested**                                 |
+| Availability              | one process, one database | four processes, one database, two single points of failure |
+| Operational complexity    | one command               | four processes, scripts, three log files                   |
 
 The availability row is the honest one.
 More processes did not buy availability here.
@@ -127,16 +127,16 @@ The gateway must be up for anything to work, and the database must be up for any
 
 ## What the measurements showed
 
-| | Default (10 stations, 60s) | Stress (100 stations, 120s) |
-|---|---|---|
-| Transactions | 2,714 (45.1/sec) | 4,588 (37.6/sec) |
-| Items scanned | 28,337 (471.1/sec) | 48,447 (397.4/sec) |
-| Error rate | 0.00% | 0.00% |
-| START p95 | 29.05ms | 588.57ms |
-| SCAN p95 | 28.30ms | 490.93ms |
-| COMPLETE p95 | 30.58ms | 486.44ms |
-| Scans dropped | 0 | 0 |
-| Service errors logged | 0 | 0 |
+|                       | Default (10 stations, 60s) | Stress (100 stations, 120s) |
+|-----------------------|----------------------------|-----------------------------|
+| Transactions          | 2,714 (45.1/sec)           | 4,588 (37.6/sec)            |
+| Items scanned         | 28,337 (471.1/sec)         | 48,447 (397.4/sec)          |
+| Error rate            | 0.00%                      | 0.00%                       |
+| START p95             | 29.05ms                    | 588.57ms                    |
+| SCAN p95              | 28.30ms                    | 490.93ms                    |
+| COMPLETE p95          | 30.58ms                    | 486.44ms                    |
+| Scans dropped         | 0                          | 0                           |
+| Service errors logged | 0                          | 0                           |
 
 Correctness held perfectly in both runs: all 2,000 SKUs exact, nothing negative, nothing unexplained.
 

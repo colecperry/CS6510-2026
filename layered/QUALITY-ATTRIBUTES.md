@@ -64,15 +64,15 @@ That is a real robustness gain. In week 1 the guarantee was an emergent property
 
 ### Performance: nothing measurable
 
-| | monolith | layered | change |
-|---|---|---|---|
-| Default, transactions/sec | 98.3 | 99.7 | +1.4% |
-| Default, SCAN p95 | 9.68ms | 9.49ms | -0.19ms |
-| Default, COMPLETE p95 | 21.48ms | 20.95ms | -0.53ms |
-| Stress, transactions/sec | 117.0 | 115.8 | -1.0% |
-| Stress, SCAN p95 | 18.39ms | 19.37ms | +0.98ms |
-| Stress, COMPLETE p95 | 2,722.91ms | 2,712.42ms | -10.5ms |
-| Stress, COMPLETE p99 | 4,486.00ms | 4,410.02ms | -76ms |
+|                           | monolith   | layered    | change  |
+|---------------------------|------------|------------|---------|
+| Default, transactions/sec | 98.3       | 99.7       | +1.4%   |
+| Default, SCAN p95         | 9.68ms     | 9.49ms     | -0.19ms |
+| Default, COMPLETE p95     | 21.48ms    | 20.95ms    | -0.53ms |
+| Stress, transactions/sec  | 117.0      | 115.8      | -1.0%   |
+| Stress, SCAN p95          | 18.39ms    | 19.37ms    | +0.98ms |
+| Stress, COMPLETE p95      | 2,722.91ms | 2,712.42ms | -10.5ms |
+| Stress, COMPLETE p99      | 4,486.00ms | 4,410.02ms | -76ms   |
 
 Every difference is inside run-to-run noise, and the default run came out marginally faster rather than slower.
 
@@ -128,14 +128,14 @@ Week 1 listed eleven required characteristics.
 Most are properties of the contract and the database, so the layering left them untouched.
 These are the ones that moved:
 
-| Characteristic | Week 1 | Week 2 |
-|---|---|---|
-| Maintainability | Rules tangled into route handlers | Rules in their own layer, no framework imports |
-| Testability | Required, but no tests possible without a server | 7 tests, no database, 0.09s |
-| Data integrity | Held, but as an emergent property of a route handler | Held, and localised in one repository method |
-| Modifiability | Changing storage meant touching every route | All SQL behind four repository classes |
-| Performance | Baseline | Unchanged, within noise |
-| Availability | Single process, single database | Unchanged - layers are not processes |
+| Characteristic  | Week 1                                               | Week 2                                         |
+|-----------------|------------------------------------------------------|------------------------------------------------|
+| Maintainability | Rules tangled into route handlers                    | Rules in their own layer, no framework imports |
+| Testability     | Required, but no tests possible without a server     | 7 tests, no database, 0.09s                    |
+| Data integrity  | Held, but as an emergent property of a route handler | Held, and localised in one repository method   |
+| Modifiability   | Changing storage meant touching every route          | All SQL behind four repository classes         |
+| Performance     | Baseline                                             | Unchanged, within noise                        |
+| Availability    | Single process, single database                      | Unchanged - layers are not processes           |
 
 That last row is worth stating plainly.
 A layered architecture is an organisation of code, not of deployment.
@@ -144,15 +144,15 @@ Nothing about this week's work moves the 99.9% availability target, and the late
 
 ## What the measurements showed
 
-| | Default (10 stations, 60s) | Stress (100 stations, 120s) | Change |
-|---|---|---|---|
-| Transactions | 5,987 (99.7/sec) | 13,936 (115.8/sec) | +16% |
-| Items scanned | 62,947 (1,048.2/sec) | 146,060 (1,213.4/sec) | +16% |
-| Error rate | 0.00% | 0.02% | 3 client timeouts |
-| START_TRANSACTION p95 | 3.67ms | 7.13ms | 1.9x |
-| SCAN_ITEM p95 | 9.49ms | 19.37ms | 2.0x |
-| COMPLETE_TRANSACTION p95 | 20.95ms | 2,712.42ms | 129x |
-| COMPLETE_TRANSACTION p99 | 29.10ms | 4,410.02ms | 152x |
+|                          | Default (10 stations, 60s) | Stress (100 stations, 120s) | Change            |
+|--------------------------|----------------------------|-----------------------------|-------------------|
+| Transactions             | 5,987 (99.7/sec)           | 13,936 (115.8/sec)          | +16%              |
+| Items scanned            | 62,947 (1,048.2/sec)       | 146,060 (1,213.4/sec)       | +16%              |
+| Error rate               | 0.00%                      | 0.02%                       | 3 client timeouts |
+| START_TRANSACTION p95    | 3.67ms                     | 7.13ms                      | 1.9x              |
+| SCAN_ITEM p95            | 9.49ms                     | 19.37ms                     | 2.0x              |
+| COMPLETE_TRANSACTION p95 | 20.95ms                    | 2,712.42ms                  | 129x              |
+| COMPLETE_TRANSACTION p99 | 29.10ms                    | 4,410.02ms                  | 152x              |
 
 The shape is identical to week 1: throughput barely moves under ten times the load because the system was already saturated, and the pain concentrates almost entirely in completion.
 

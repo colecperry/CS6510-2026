@@ -13,13 +13,13 @@ dependencies managed with `uv`.
 All 7 endpoints implemented. Both required load runs complete, and the
 correctness invariant holds in both.
 
-| | Default (10 stations, 60s) | Stress (100 stations, 120s) |
-|---|---|---|
-| Transactions | 5,987 (99.7/sec) | 13,936 (115.8/sec) |
-| Items scanned | 62,947 (1,048.2/sec) | 146,060 (1,213.4/sec) |
-| SCAN_ITEM p95 | 9.49ms | 19.37ms |
-| COMPLETE_TRANSACTION p95 | 20.95ms | 2,712.42ms |
-| Error rate | 0.00% | 0.02% (see below) |
+|                          | Default (10 stations, 60s) | Stress (100 stations, 120s) |
+|--------------------------|----------------------------|-----------------------------|
+| Transactions             | 5,987 (99.7/sec)           | 13,936 (115.8/sec)          |
+| Items scanned            | 62,947 (1,048.2/sec)       | 146,060 (1,213.4/sec)       |
+| SCAN_ITEM p95            | 9.49ms                     | 19.37ms                     |
+| COMPLETE_TRANSACTION p95 | 20.95ms                    | 2,712.42ms                  |
+| Error rate               | 0.00%                      | 0.02% (see below)           |
 
 Raw reports are in `reports/`.
 
@@ -214,10 +214,10 @@ FROM stock s LEFT JOIN li ON li.sku = s.sku;
 
 Results from the submitted runs:
 
-| | negative stock | exact | explained by selling out | unexplained |
-|---|---|---|---|---|
-| Default | 0 | 2000 | 0 | 0 |
-| Stress | 0 | 1999 | 1 | 0 |
+|         | negative stock | exact | explained by selling out | unexplained |
+|---------|----------------|-------|--------------------------|-------------|
+| Default | 0              | 2000  | 0                        | 0           |
+| Stress  | 0              | 1999  | 1                        | 0           |
 
 The single non-exact SKU under stress is SKU-000001, the most-scanned item,
 which sold out. The contract defines no "insufficient stock" response, so
@@ -231,29 +231,29 @@ architecture.
 
 ### Default (10 stations, 60s)
 
-| | monolith | layered | change |
-|---|---|---|---|
-| Transactions/sec | 98.3 | 99.7 | +1.4% |
-| Items/sec | 1,032.6 | 1,048.2 | +1.5% |
-| START p95 | 3.79ms | 3.67ms | -0.12ms |
-| SCAN p95 | 9.68ms | 9.49ms | -0.19ms |
-| SCAN p99 | 22.02ms | 20.64ms | -1.38ms |
-| COMPLETE p95 | 21.48ms | 20.95ms | -0.53ms |
-| COMPLETE p99 | 30.18ms | 29.10ms | -1.08ms |
-| Error rate | 0.00% | 0.00% | - |
+|                  | monolith | layered | change  |
+|------------------|----------|---------|---------|
+| Transactions/sec | 98.3     | 99.7    | +1.4%   |
+| Items/sec        | 1,032.6  | 1,048.2 | +1.5%   |
+| START p95        | 3.79ms   | 3.67ms  | -0.12ms |
+| SCAN p95         | 9.68ms   | 9.49ms  | -0.19ms |
+| SCAN p99         | 22.02ms  | 20.64ms | -1.38ms |
+| COMPLETE p95     | 21.48ms  | 20.95ms | -0.53ms |
+| COMPLETE p99     | 30.18ms  | 29.10ms | -1.08ms |
+| Error rate       | 0.00%    | 0.00%   | -       |
 
 ### Stress (100 stations, 120s)
 
-| | monolith | layered | change |
-|---|---|---|---|
-| Transactions/sec | 117.0 | 115.8 | -1.0% |
-| Items/sec | 1,222.2 | 1,213.4 | -0.7% |
-| START p95 | 6.59ms | 7.13ms | +0.54ms |
-| SCAN p95 | 18.39ms | 19.37ms | +0.98ms |
-| SCAN p99 | 55.45ms | 52.85ms | -2.60ms |
-| COMPLETE p95 | 2,722.91ms | 2,712.42ms | -10.5ms |
-| COMPLETE p99 | 4,486.00ms | 4,410.02ms | -76ms |
-| Error rate | 0.00% | 0.02% | +3 requests |
+|                  | monolith   | layered    | change      |
+|------------------|------------|------------|-------------|
+| Transactions/sec | 117.0      | 115.8      | -1.0%       |
+| Items/sec        | 1,222.2    | 1,213.4    | -0.7%       |
+| START p95        | 6.59ms     | 7.13ms     | +0.54ms     |
+| SCAN p95         | 18.39ms    | 19.37ms    | +0.98ms     |
+| SCAN p99         | 55.45ms    | 52.85ms    | -2.60ms     |
+| COMPLETE p95     | 2,722.91ms | 2,712.42ms | -10.5ms     |
+| COMPLETE p99     | 4,486.00ms | 4,410.02ms | -76ms       |
+| Error rate       | 0.00%      | 0.02%      | +3 requests |
 
 ### Reading these numbers
 

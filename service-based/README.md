@@ -8,11 +8,11 @@ Built on [week 4's pipeline implementation](../pipeline), so the comparison belo
 
 **The system has three domain services, plus an entry point.**
 
-| Service | Business function | Owns | Port |
-|---|---|---|---|
-| **checkout** | Ringing up a sale | `POST /transactions`, `POST /transactions/{id}/items`, `POST /transactions/{id}/complete`, `GET /transactions/{id}` | 8081 |
-| **inventory** | What we sell, and what is running out | `GET /items`, `GET /inventory/low-stock` | 8082 |
-| **analytics** | Reporting on trends | `GET /analytics/popular-items`, plus the background rebuild | 8083 |
+| Service       | Business function                     | Owns                                                                                                                | Port |
+|---------------|---------------------------------------|---------------------------------------------------------------------------------------------------------------------|------|
+| **checkout**  | Ringing up a sale                     | `POST /transactions`, `POST /transactions/{id}/items`, `POST /transactions/{id}/complete`, `GET /transactions/{id}` | 8081 |
+| **inventory** | What we sell, and what is running out | `GET /items`, `GET /inventory/low-stock`                                                                            | 8082 |
+| **analytics** | Reporting on trends                   | `GET /analytics/popular-items`, plus the background rebuild                                                         | 8083 |
 
 **gateway** (8080) is not a domain service.
 It receives every request and forwards it to whichever service owns the path.
@@ -43,12 +43,12 @@ Neither service knows the other exists.
 `common/` is a library holding the connection pool and the four repositories, installed by each service as a local dependency.
 Each service imports only what it uses.
 
-| Repository | Used by |
-|---|---|
-| `catalog_repo` | all three |
-| `baskets_repo` | checkout |
-| `stock_repo` | inventory reads; checkout writes stock inside `baskets_repo.complete()` |
-| `scans_repo` | checkout writes, analytics reads |
+| Repository     | Used by                                                                 |
+|----------------|-------------------------------------------------------------------------|
+| `catalog_repo` | all three                                                               |
+| `baskets_repo` | checkout                                                                |
+| `stock_repo`   | inventory reads; checkout writes stock inside `baskets_repo.complete()` |
+| `scans_repo`   | checkout writes, analytics reads                                        |
 
 A shared library is itself a form of coupling: changing a query means redeploying every service that uses it.
 That is the accepted cost, and it is the characteristic trade of service-based architecture against microservices, where each service would own its own tables and its own copy of the code.
@@ -63,26 +63,26 @@ Reports in `reports/`.
 
 ### Default (10 stations, 60s)
 
-| | monolith | layered | pipeline | service-based |
-|---|---|---|---|---|
-| Transactions/sec | 98.3 | 99.7 | 123.6 | **45.1** |
-| Items/sec | 1,032.6 | 1,048.2 | 1,300.9 | **471.1** |
-| START p95 | 3.79ms | 3.67ms | 4.58ms | **29.05ms** |
-| SCAN p95 | 9.68ms | 9.49ms | 7.10ms | **28.30ms** |
-| COMPLETE p95 | 21.48ms | 20.95ms | 31.95ms | **30.58ms** |
-| Error rate | 0.00% | 0.00% | 0.00% | **0.00%** |
+|                  | monolith | layered | pipeline | service-based |
+|------------------|----------|---------|----------|---------------|
+| Transactions/sec | 98.3     | 99.7    | 123.6    | **45.1**      |
+| Items/sec        | 1,032.6  | 1,048.2 | 1,300.9  | **471.1**     |
+| START p95        | 3.79ms   | 3.67ms  | 4.58ms   | **29.05ms**   |
+| SCAN p95         | 9.68ms   | 9.49ms  | 7.10ms   | **28.30ms**   |
+| COMPLETE p95     | 21.48ms  | 20.95ms | 31.95ms  | **30.58ms**   |
+| Error rate       | 0.00%    | 0.00%   | 0.00%    | **0.00%**     |
 
 ### Stress (100 stations, 120s)
 
-| | monolith | layered | pipeline | service-based |
-|---|---|---|---|---|
-| Transactions/sec | 117.0 | 115.8 | 124.5 | **37.6** |
-| Items/sec | 1,222.2 | 1,213.4 | 1,313.7 | **397.4** |
-| START p95 | 6.59ms | 7.13ms | 7.07ms | **588.57ms** |
-| SCAN p95 | 18.39ms | 19.37ms | 10.88ms | **490.93ms** |
-| COMPLETE p95 | 2,722.91ms | 2,712.42ms | 2,726.74ms | **486.44ms** |
-| COMPLETE p99 | 4,486.00ms | 4,410.02ms | 4,608.61ms | **807.08ms** |
-| Error rate | 0.00% | 0.02% | 0.02% | **0.00%** |
+|                  | monolith   | layered    | pipeline   | service-based |
+|------------------|------------|------------|------------|---------------|
+| Transactions/sec | 117.0      | 115.8      | 124.5      | **37.6**      |
+| Items/sec        | 1,222.2    | 1,213.4    | 1,313.7    | **397.4**     |
+| START p95        | 6.59ms     | 7.13ms     | 7.07ms     | **588.57ms**  |
+| SCAN p95         | 18.39ms    | 19.37ms    | 10.88ms    | **490.93ms**  |
+| COMPLETE p95     | 2,722.91ms | 2,712.42ms | 2,726.74ms | **486.44ms**  |
+| COMPLETE p99     | 4,486.00ms | 4,410.02ms | 4,608.61ms | **807.08ms**  |
+| Error rate       | 0.00%      | 0.02%      | 0.02%      | **0.00%**     |
 
 ### Reading these numbers
 
@@ -109,10 +109,10 @@ The improvement is a side effect of the throughput collapse, not a fix.
 
 ## Correctness
 
-| | negative stock | exact | explained by selling out | unexplained |
-|---|---|---|---|---|
-| Default | 0 | 2000 | 0 | 0 |
-| Stress | 0 | 2000 | 0 | 0 |
+|         | negative stock | exact | explained by selling out | unexplained |
+|---------|----------------|-------|--------------------------|-------------|
+| Default | 0              | 2000  | 0                        | 0           |
+| Stress  | 0              | 2000  | 0                        | 0           |
 
 Zero scans dropped by the checkout service, and zero errors in any service log, in both runs.
 

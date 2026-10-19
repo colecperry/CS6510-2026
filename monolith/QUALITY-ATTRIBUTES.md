@@ -100,15 +100,15 @@ A real store would reserve stock at scan time, or be allowed to say no.
 
 ## What the measurements showed
 
-| | Default (10 stations, 60s) | Stress (100 stations, 120s) | Change |
-|---|---|---|---|
-| Transactions | 5,905 (98.3/sec) | 14,085 (117.0/sec) | +19% |
-| Items scanned | 62,027 (1,032.6/sec) | 147,182 (1,222.2/sec) | +18% |
-| Error rate | 0.00% | 0.00% | - |
-| START_TRANSACTION p95 | 3.79ms | 6.59ms | 1.7x |
-| SCAN_ITEM p95 | 9.68ms | 18.39ms | 1.9x |
-| COMPLETE_TRANSACTION p95 | 21.48ms | 2,722.91ms | 127x |
-| COMPLETE_TRANSACTION p99 | 30.18ms | 4,486.00ms | 149x |
+|                          | Default (10 stations, 60s) | Stress (100 stations, 120s) | Change |
+|--------------------------|----------------------------|-----------------------------|--------|
+| Transactions             | 5,905 (98.3/sec)           | 14,085 (117.0/sec)          | +19%   |
+| Items scanned            | 62,027 (1,032.6/sec)       | 147,182 (1,222.2/sec)       | +18%   |
+| Error rate               | 0.00%                      | 0.00%                       | -      |
+| START_TRANSACTION p95    | 3.79ms                     | 6.59ms                      | 1.7x   |
+| SCAN_ITEM p95            | 9.68ms                     | 18.39ms                     | 1.9x   |
+| COMPLETE_TRANSACTION p95 | 21.48ms                    | 2,722.91ms                  | 127x   |
+| COMPLETE_TRANSACTION p99 | 30.18ms                    | 4,486.00ms                  | 149x   |
 
 **Throughput barely moved.** Ten times the stations bought 19% more transactions per second.
 The system was already saturated well below 100 stations, so the extra load became queueing rather than work.
