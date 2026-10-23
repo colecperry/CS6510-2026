@@ -1,0 +1,52 @@
+# Three separate Postgres instances, one per microservice. This is the week's defining change: last week three services shared one database, so the coupling simply moved from the code into the schema.
+#
+# Separate containers rather than three schemas inside one, because schemas in a shared instance would still share a process, a page cache and a connection limit, and a cross-schema query would still work. The boundary has to be real or the measurement means nothing.
+services:
+  checkout-db:
+    image: postgres:16
+    # Container names are global to the Docker daemon, so each week and each service needs its own or whichever starts second fails outright.
+    container_name: self-checkout-db-checkout
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    # Host ports 5433 through 5436 belong to the earlier weeks, so this week takes the next three.
+    ports:
+      - "5437:5432"
+    volumes:
+      - checkout_pgdata:/var/lib/postgresql/data
+    # Checkout takes nearly all the traffic, so it gets the full allowance the previous weeks gave one database.
+    command: postgres -c max_connections=200
+
+  inventory-db:
+    image: postgres:16
+    container_name: self-checkout-db-inventory
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    ports:
+      - "5438:5432"
+    volumes:
+      - inventory_pgdata:/var/lib/postgresql/data
+    # Inventory is called once per payment rather than once per scan, so it needs far fewer connections than checkout.
+    command: postgres -c max_connections=50
+
+  analytics-db:
+    image: postgres:16
+    container_name: self-checkout-db-analytics
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    ports:
+      - "5439:5432"
+    volumes:
+      - analytics_pgdata:/var/lib/postgresql/data
+    command: postgres -c max_connections=50
+
+# One volume per instance. Sharing one would put three databases' files in the same place and defeat the separation.
+volumes:
+  checkout_pgdata:
+  inventory_pgdata:
+  analytics_pgdata:

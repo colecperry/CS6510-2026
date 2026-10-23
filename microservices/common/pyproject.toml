@@ -1,0 +1,23 @@
+# The shared library. Every service imports it; nothing runs it.
+#
+# It holds what the services must agree on and nothing else: the shapes that go over the wire, the domain errors, how those map to status codes, and the mechanics of opening a connection pool.
+# It deliberately holds no SQL. Last week it held every query, which meant any service could read any table simply by importing it. Each query now lives in the one service that owns its table.
+[project]
+name = "common"
+version = "0.1.0"
+description = "The wire contract and shared error handling, imported by every service"
+requires-python = ">=3.12"
+# Pinned exactly rather than as floors. Resolving freely drifted five packages away from week 4, including the database driver, which would make any latency difference this week impossible to attribute to the architecture. Versions are week 4's, read from pipeline/uv.lock.
+dependencies = [
+    "asyncpg==0.31.0",
+    # Only for error_handlers.py, which turns a domain error into a response. Shared so the three services cannot disagree about what a conflict looks like.
+    "fastapi==0.142.1",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.15.0",
+    # Transitive, via pydantic-settings. Pinned because it drifted too.
+    "python-dotenv==1.2.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
