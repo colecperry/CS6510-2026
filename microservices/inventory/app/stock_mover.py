@@ -16,12 +16,12 @@ class StockMover:
         self._stock = stock
 
     async def reduce(self, key: str, lines: list[tuple[str, int]]) -> bool:
-        """Takes the given quantities off the shelf. False if this key was already applied, so nothing changed."""
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                if not await self._claim(conn, key, lines):
+        """Reduces stock for one request. Returns False if this key was seen before, so stock is only reduced once."""
+        async with self._pool.acquire() as conn: # borrow a connection to the pool
+            async with conn.transaction(): # start transaction: key & stock change happen together
+                if not await self._claim(conn, key, lines): # try to record the key
                     return False         # a repeat; the first copy already did the work
-                await self._stock.apply_delta(conn, lines, sign=-1)
+                await self._stock.apply_delta(conn, lines, sign=-1) # reduce the stock
                 return True
 
     async def restore(self, key: str) -> bool:
@@ -49,11 +49,12 @@ class StockMover:
     async def _claim(
         self, conn: asyncpg.Connection, key: str, lines: list[tuple[str, int]]
     ) -> bool:
-        """Records this key as applied. False if it was already recorded, meaning this is a repeat."""
-        # ON CONFLICT DO NOTHING makes the insert itself the test: the first caller gets a row back and does the work, a second gets nothing and skips it. Checking first and then inserting would leave a gap for two concurrent copies to both pass the check.
+        """Tries to add the key to inventory's list of keys it has seen before. Returns True if it was added, False if it was already there. The caller must then reduce stock or not."""
+        # Add a row to applied_requests - inventory's list of keys it has seen before
+        # If key already in the table don't add it again
         row = await conn.fetchrow(
             """
-            INSERT INTO applied_requests (idempotency_key, lines)
+            INSERT INTO applied_requests (idempotency_key, lines) 
             VALUES ($1, $2::jsonb)
             ON CONFLICT (idempotency_key) DO NOTHING
             RETURNING idempotency_key
@@ -61,7 +62,7 @@ class StockMover:
             key,
             json.dumps([{"sku": sku, "qty": qty} for sku, qty in lines]),
         )
-        return row is not None
+        return row is not None # Got a key back - row was added, got a None back - row was already there, don't reduce stock
 
     async def _claim_restore(
         self, conn: asyncpg.Connection, key: str

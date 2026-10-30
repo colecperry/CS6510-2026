@@ -1,14 +1,22 @@
 # The checkout rules: what may be scanned, what may be paid for, and what the shopper is told when the answer is no.
 #
 # Knows nothing about HTTP and writes no SQL. It raises the errors in common/errors.py and leaves the routes to turn those into responses.
-from app.data.baskets_repo import BasketsRepo
+from app.data.baskets_repo import BasketsRepo, TransactionRow
 from app.data.catalog_repo import CatalogRepo
+from app.ingest import ScanWriter
+from app.saga.coordinator import PaymentCoordinator
 from common.errors import ConflictError, InvalidRequestError, NotFoundError
 from common.schemas import Receipt, ReceiptLine, ScanResult, Transaction
 
 
 class CheckoutService:
-    def __init__(self, baskets: BasketsRepo, catalog: CatalogRepo, scans, payments):
+    def __init__(
+        self,
+        baskets: BasketsRepo,
+        catalog: CatalogRepo,
+        scans: ScanWriter,
+        payments: PaymentCoordinator,
+    ):
         self._baskets = baskets        # baskets and receipts
         self._catalog = catalog        # prices, from memory
         self._scans = scans            # where scans go to be counted later
@@ -94,7 +102,7 @@ class CheckoutService:
 
 
 # Database row to API response. The two happen to line up field for field.
-def _to_transaction(row) -> Transaction:
+def _to_transaction(row: TransactionRow) -> Transaction:
     return Transaction(
         transaction_id=row.transaction_id,
         station_id=row.station_id,

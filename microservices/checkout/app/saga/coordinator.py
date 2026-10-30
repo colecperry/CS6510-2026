@@ -6,49 +6,53 @@
 import logging
 import uuid
 
-from app.clients.inventory_client import InventoryUnavailable
+from app.clients.inventory_client import InventoryClient, InventoryUnavailable
+from app.data.baskets_repo import BasketsRepo
+from app.data.saga_repo import SagaRepo
 from common.errors import ConflictError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
 
 class PaymentCoordinator:
-    def __init__(self, baskets, sagas, inventory):
+    def __init__(
+        self, baskets: BasketsRepo, sagas: SagaRepo, inventory: InventoryClient
+    ):
         self._baskets = baskets          # this service's baskets and receipt lines
         self._sagas = sagas              # the record of how far a payment got
         self._inventory = inventory      # the service that owns stock
 
     async def pay(self, transaction_id: str):
         """Pays for a basket and returns the rows a receipt is built from. Raises if it cannot."""
-        saga_id = f"saga-{uuid.uuid4().hex}"
+        saga_id = f"saga-{uuid.uuid4().hex}" # create a saga id for this payment attempt
 
-        # Claiming the basket and writing down what we intend to do happen together, so a payment can never be in flight without a record saying so.
-        async with self._sagas.acquire() as conn:
-            async with conn.transaction():
-                if not await self._sagas.claim_basket(conn, transaction_id):
+        # Lock the basket and write the saga row together, or not at all.
+        async with self._sagas.acquire() as conn: # borrow a connection to the pool
+            async with conn.transaction(): # open the transaction
+                if not await self._sagas.claim_basket(conn, transaction_id): # claim the basket
                     raise await self._refusal(transaction_id)
-                lines = await self._baskets.receipt_lines(conn, transaction_id)
-                await self._sagas.open_saga(
+                lines = await self._baskets.receipt_lines(conn, transaction_id) # read basket
+                await self._sagas.open_saga( # write the saga row
                     conn,
                     saga_id,
                     transaction_id,
                     [(line.sku, line.quantity) for line in lines],
                 )
 
-        # Step one, in the other service's database. The client retries inside its budget before giving up.
+        # Ask inventory to reduce stock. The saga id lets it ignore repeats and undo this change.
         try:
             await self._inventory.reduce_stock(
                 saga_id, [(line.sku, line.quantity) for line in lines]
             )
-        except InventoryUnavailable:
-            # The reduction may or may not have landed: a lost reply looks exactly like a lost request. Asking inventory to undo this key covers both, because undoing something never applied changes nothing.
-            await self._try_compensate(transaction_id, saga_id)
-            raise ConflictError(
+        except InventoryUnavailable: 
+            # No answer: ask inventory to put the stock back, then unlock the basket.
+            await self._try_compensate(transaction_id, saga_id) # Payment refused
+            raise ConflictError( # Refuse the payment
                 "TRANSACTION_NOT_OPEN", "Could not complete payment, please try again"
             )
-        await self._sagas.mark(saga_id, "APPLIED")
+        await self._sagas.mark(saga_id, "APPLIED") # inventory confirmed the stock dropped
 
-        # Step two, in this one. From here the books balance again.
+        # Second transaction: mark the basket paid and the saga done, together or not at all.
         async with self._sagas.acquire() as conn:
             async with conn.transaction():
                 row = await self._sagas.finish(conn, transaction_id, saga_id)

@@ -6,6 +6,8 @@
 import asyncio
 import logging
 
+from app.clients.analytics_client import AnalyticsClient
+
 logger = logging.getLogger(__name__)
 
 # Most scans one batch may carry. The ranking rebuilds every 500 scans, so staying under that keeps one batch from skipping a rebuild point.
@@ -16,7 +18,7 @@ MAX_PENDING = 50_000
 
 
 class ScanWriter:
-    def __init__(self, analytics):
+    def __init__(self, analytics: AnalyticsClient):
         self._analytics = analytics                           # the service that owns the scan log
         self._queue: asyncio.Queue[str] = asyncio.Queue(maxsize=MAX_PENDING)
         self._task: asyncio.Task | None = None

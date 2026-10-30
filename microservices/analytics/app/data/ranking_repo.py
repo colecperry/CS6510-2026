@@ -29,20 +29,22 @@ class RankingRepo:
         self._pool = pool
 
     async def claim_rebuild_if_due(self) -> tuple[int, int] | None:
-        """Claims the right to rebuild the ranking, if enough scans have passed. Returns the stretch to count, or None."""
-        # Asking how far the log has got, deciding whether that is far enough, and claiming the rebuild all happen in one statement. Two pollers can therefore never both claim the same rebuild, and a poll costs one round trip rather than two.
+        """Claims the next ranking rebuild if 500 new scans have arrived. Returns the range of scans to count, or None."""
+        # Checking + claiming happen in 1 statement, two pollers can never claim the same rebuild.
         row = await self._pool.fetchrow(
             """
-            UPDATE popularity_state
+            UPDATE popularity_state  -- one row holding the current window and its settings
+            -- move the window to the newest 1000 scans (never below 0)
             SET window_start = GREATEST(0, (SELECT COALESCE(max(seq), 0) FROM scan_log) - window_size),
                 window_end = (SELECT COALESCE(max(seq), 0) FROM scan_log),
                 computed_at = now()
+            -- only if 500+ scans have arrived since the last window ended
             WHERE (SELECT COALESCE(max(seq), 0) FROM scan_log) - window_end >= slide_interval
-            RETURNING window_start, window_end
+            RETURNING window_start, window_end  -- only returns if the window moved
             """
         )
         if row is None:
-            return None                  # not due yet
+            return None  # not due yet
         return row["window_start"], row["window_end"]
 
     async def publish(self, conn: asyncpg.Connection, ranked: list[PopularItemRow]) -> None:

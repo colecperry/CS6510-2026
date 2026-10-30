@@ -18,7 +18,7 @@ STRANDED = UnfinishedSaga(
 def build(applied: bool, finishable: bool = True):
     sagas = FakeSagas(unfinished=[STRANDED], finishable=finishable)
     inventory = FakeInventory(applied=applied)
-    return SagaRecovery(FakeBaskets(), sagas, inventory), sagas, inventory
+    return SagaRecovery(sagas, inventory), sagas, inventory
 
 
 async def test_a_payment_whose_stock_never_moved_is_undone():
@@ -64,7 +64,7 @@ async def test_recovery_is_safe_to_run_twice():
 async def test_an_unreachable_inventory_leaves_the_saga_for_next_time():
     # Only inventory knows whether stock moved. If it cannot be asked, guessing would be worse than waiting, so the row stays unfinished and the next startup asks again.
     sagas = FakeSagas(unfinished=[STRANDED])
-    recovery = SagaRecovery(FakeBaskets(), sagas, FakeInventory(unreachable=True))
+    recovery = SagaRecovery(sagas, FakeInventory(unreachable=True))
 
     outcome = await recovery.recover_once()
 
@@ -76,6 +76,6 @@ async def test_an_unreachable_inventory_leaves_the_saga_for_next_time():
 async def test_startup_is_not_blocked_by_an_unreachable_inventory():
     # Recovery runs before this service accepts traffic. If it raised instead of recording a failure, a down inventory would stop checkout starting at all.
     sagas = FakeSagas(unfinished=[STRANDED])
-    recovery = SagaRecovery(FakeBaskets(), sagas, FakeInventory(unreachable=True))
+    recovery = SagaRecovery(sagas, FakeInventory(unreachable=True))
 
     await recovery.recover_once()          # must return rather than raise

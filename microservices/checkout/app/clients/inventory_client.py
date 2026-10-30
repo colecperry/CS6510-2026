@@ -4,6 +4,7 @@
 # Nothing in this file decides anything: it asks, retries while it is worth retrying, and reports what came back.
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -47,7 +48,9 @@ class InventoryClient:
     async def _get(self, path: str, retry: bool = True) -> dict:
         return await self._with_retries(lambda: self._client.get(self._base + path), retry)
 
-    async def _with_retries(self, send, retry: bool = True) -> dict:
+    async def _with_retries(
+        self, send: Callable[[], Awaitable[httpx.Response]], retry: bool = True
+    ) -> dict:
         """Keeps trying until the budget runs out, then gives up so the caller can refuse cleanly."""
         # Bounded on purpose. The load client abandons a request after 10 seconds, and a request it abandoned leaves no server-side evidence of what went wrong. Giving up first turns a dead dependency into a refusal we can explain.
         deadline = time.monotonic() + (self._budget if retry else 0)

@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     payments = PaymentCoordinator(baskets_repo, saga_repo, inventory_client)
 
     # Repair anything a previous run left half done, before this one takes a single request. Serving first could let a shopper scan into a basket whose stock has already been taken.
-    await SagaRecovery(baskets_repo, saga_repo, inventory_client).recover_once()
+    await SagaRecovery(saga_repo, inventory_client).recover_once()
 
     # Scans belong to analytics, so they leave this process over the network. The writer queues them so a shopper never waits for that.
     analytics_client = AnalyticsClient(settings.analytics_url, settings.stock_call_timeout_ms)

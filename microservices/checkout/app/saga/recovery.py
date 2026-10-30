@@ -5,14 +5,14 @@
 # What survives is the saga row. This reads the ones left unfinished, asks inventory whether each actually moved any stock, and drives each to one of the two valid endings: the payment completes, or everything it did is undone.
 import logging
 
-from app.clients.inventory_client import InventoryUnavailable
+from app.clients.inventory_client import InventoryClient, InventoryUnavailable
+from app.data.saga_repo import SagaRepo, UnfinishedSaga
 
 logger = logging.getLogger(__name__)
 
 
 class SagaRecovery:
-    def __init__(self, baskets, sagas, inventory):
-        self._baskets = baskets
+    def __init__(self, sagas: SagaRepo, inventory: InventoryClient):
         self._sagas = sagas
         self._inventory = inventory
 
@@ -35,7 +35,7 @@ class SagaRecovery:
             logger.info("recovered interrupted payments: %s", outcome)
         return outcome
 
-    async def _repair(self, saga) -> None:
+    async def _repair(self, saga: UnfinishedSaga) -> None:
         """Drives one interrupted payment to an end state."""
         # Only inventory knows whether the stock actually moved, because a crash can happen either side of its reply.
         applied = await self._inventory.was_applied(saga.saga_id)
@@ -55,6 +55,6 @@ class SagaRecovery:
             await self._inventory.restore_stock(saga.saga_id)
             await self._sagas.release_basket(saga.transaction_id, saga.saga_id)
 
-    async def _is_done(self, saga) -> bool:
+    async def _is_done(self, saga: UnfinishedSaga) -> bool:
         """Whether the repair ended in a completed sale rather than an undo."""
         return await self._inventory.was_applied(saga.saga_id)

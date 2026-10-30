@@ -6,7 +6,9 @@
 import asyncio
 import logging
 
-from app.data.ranking_repo import PopularItemRow
+from app.data.catalog_repo import CatalogRepo
+from app.data.ranking_repo import PopularItemRow, RankingRepo
+from app.data.scans_repo import ScansRepo
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,13 @@ POLL_SECONDS = 0.25
 
 
 class RankingRebuilder:
-    def __init__(self, scans, ranking, catalog, snapshot_cap: int):
+    def __init__(
+        self,
+        scans: ScansRepo,
+        ranking: RankingRepo,
+        catalog: CatalogRepo,
+        snapshot_cap: int,
+    ):
         self._scans = scans                  # the scan stream
         self._ranking = ranking              # the published ranking and its window
         self._catalog = catalog              # item names, from memory
@@ -24,11 +32,13 @@ class RankingRebuilder:
 
     async def poll_once(self) -> None:
         """Asks whether a rebuild is due, and does it if so."""
+        # function from last slide - returns None if not due, or the window to count if due
         window = await self._ranking.claim_rebuild_if_due()
         if window is None:
-            return                           # not due. the usual answer.
+            return   # not due. the usual answer.
 
         start, end = window
+        # count how many times each item was scaned, return top N items
         counts = await self._scans.count_window(start, end, self._snapshot_cap)
 
         # Names come from this service's own copy of the catalogue, never from a call to inventory.
@@ -42,11 +52,11 @@ class RankingRebuilder:
             for position, count in enumerate(counts, start=1)
         ]
 
-        # Publishing and pruning share one transaction: the old ranking is deleted before the new one lands, and the scans behind it must not disappear unless the ranking they produced is safely stored.
+        # One transaction: if saving the ranking fails, the old scans are not deleted either.
         async with self._ranking.acquire() as conn:
             async with conn.transaction():
-                await self._ranking.publish(conn, ranked)
-                await self._scans.prune_before(conn, start)
+                await self._ranking.publish(conn, ranked) # replace old ranking with new one
+                await self._scans.prune_before(conn, start) # delete scans older than this window
 
     async def start(self) -> None:
         """Starts polling. Call once, at startup."""

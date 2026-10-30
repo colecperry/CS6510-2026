@@ -2,6 +2,7 @@
 #
 # This one talks to the real database on purpose. The guarantee comes from a Postgres ON CONFLICT clause, so a stand-in would only be testing the stand-in. Skipped when the database is not running, so the rest of the suite still works without Docker.
 import asyncio
+import uuid
 
 import asyncpg
 import pytest
@@ -29,14 +30,14 @@ async def _qty(pool) -> int:
 @pytest.fixture
 async def mover():
     pool = await _pool()
-    # Each test uses a key of its own and puts the stock back, so running the suite twice leaves the database as it found it.
+    # Keys are generated per run, because applying one leaves a row behind for ever. A fixed key would pass once and then fail on every later run.
     yield StockMover(pool, StockRepo(pool)), pool
     await pool.close()
 
 
 async def test_the_same_key_twice_moves_stock_once(mover):
     stock_mover, pool = mover
-    key = "test-idempotency-once"
+    key = f"test-idempotency-once-{uuid.uuid4().hex}"
     before = await _qty(pool)
 
     first = await stock_mover.reduce(key, [(SKU, 3)])
@@ -54,7 +55,7 @@ async def test_the_same_key_twice_moves_stock_once(mover):
 async def test_concurrent_copies_of_one_request_still_move_stock_once(mover):
     # A retry can overlap the original rather than following it. If the check and the insert were separate statements, both copies could pass the check and stock would go down twice.
     stock_mover, pool = mover
-    key = "test-idempotency-concurrent"
+    key = f"test-idempotency-concurrent-{uuid.uuid4().hex}"
     before = await _qty(pool)
 
     results = await asyncio.gather(*[stock_mover.reduce(key, [(SKU, 2)]) for _ in range(5)])
@@ -67,7 +68,7 @@ async def test_concurrent_copies_of_one_request_still_move_stock_once(mover):
 
 async def test_an_undo_only_puts_stock_back_once(mover):
     stock_mover, pool = mover
-    key = "test-idempotency-undo"
+    key = f"test-idempotency-undo-{uuid.uuid4().hex}"
     before = await _qty(pool)
 
     await stock_mover.reduce(key, [(SKU, 4)])
@@ -83,5 +84,5 @@ async def test_undoing_something_never_applied_changes_nothing(mover):
     stock_mover, pool = mover
     before = await _qty(pool)
 
-    assert await stock_mover.restore("test-key-that-was-never-applied") is False
+    assert await stock_mover.restore(f"never-applied-{uuid.uuid4().hex}") is False
     assert await _qty(pool) == before
