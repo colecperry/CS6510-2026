@@ -1,0 +1,72 @@
+# Three Postgres instances, one per microservice, plus the message broker that is this week's defining change.
+#
+# Last week the services each owned a database but still called each other directly, so a payment could not proceed unless the service it needed answered within two seconds. The broker removes that dependency: a service hands over a message and stops waiting.
+services:
+  checkout-db:
+    image: postgres:16
+    # Container names are global to the Docker daemon, so each week and each service needs its own or whichever starts second fails outright.
+    container_name: self-checkout-db-checkout-ed
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    # Host ports 5433 through 5439 belong to weeks 1 to 6, so this week takes the next three.
+    ports:
+      - "5440:5432"
+    volumes:
+      - checkout_pgdata:/var/lib/postgresql/data
+    # Checkout takes nearly all the traffic, so it gets the full allowance the previous weeks gave one database.
+    command: postgres -c max_connections=200
+
+  inventory-db:
+    image: postgres:16
+    container_name: self-checkout-db-inventory-ed
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    ports:
+      - "5441:5432"
+    volumes:
+      - inventory_pgdata:/var/lib/postgresql/data
+    # Inventory now writes once per sale rather than being called once per payment, so its connection needs are smaller still.
+    command: postgres -c max_connections=50
+
+  analytics-db:
+    image: postgres:16
+    container_name: self-checkout-db-analytics-ed
+    environment:
+      POSTGRES_USER: checkout
+      POSTGRES_PASSWORD: checkout
+      POSTGRES_DB: self_checkout
+    ports:
+      - "5442:5432"
+    volumes:
+      - analytics_pgdata:/var/lib/postgresql/data
+    command: postgres -c max_connections=50
+
+  # The broker every service connects to, and the only thing any of them share. The management image is chosen over the plain one so the queues can be watched while the load client runs, which is how the no-direct-calls claim is demonstrated rather than asserted.
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: self-checkout-broker
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"      # AMQP, what the services speak
+      - "15672:15672"    # the management UI, for watching and for screenshots
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    # Services fail to start if they connect before the broker is listening, and the broker takes several seconds longer than Postgres to come up.
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+# One volume per instance. Sharing one would put three databases' files in the same place and defeat the separation.
+volumes:
+  checkout_pgdata:
+  inventory_pgdata:
+  analytics_pgdata:
+  rabbitmq_data:
