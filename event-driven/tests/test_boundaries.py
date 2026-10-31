@@ -21,10 +21,13 @@ SHARED_BY_COPY = {"catalog"}
 # The port each service listens on. Finding one of these in another service's source means that service knows where to find it, which is the thing the broker exists to remove.
 PORTS = {"checkout": "8081", "inventory": "8082", "analytics": "8083"}
 
+# The Python gateway sits under edge/ this week, beside the nginx config it is being compared against.
+SOURCE_ROOT = {"gateway": "edge/gateway"}
+
 
 def source_files(service: str) -> list[Path]:
     """Every Python file belonging to one service, tests excluded."""
-    return sorted((ROOT / service / "app").rglob("*.py"))
+    return sorted((ROOT / SOURCE_ROOT.get(service, service) / "app").rglob("*.py"))
 
 
 def read(service: str) -> str:
@@ -108,7 +111,7 @@ def test_the_gateway_does_not_expose_internal_endpoints():
     # The routes themselves are gone this week, so this guards against one being reintroduced and routed by accident rather than against today's code.
     from importlib import util
 
-    spec = util.spec_from_file_location("gw_routes", ROOT / "gateway" / "app" / "routes.py")
+    spec = util.spec_from_file_location("gw_routes", ROOT / "edge" / "gateway" / "app" / "routes.py")
     routes = util.module_from_spec(spec)
     spec.loader.exec_module(routes)
 

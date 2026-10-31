@@ -1,6 +1,7 @@
 # Workspace root. Not a package itself, just the thing that ties the five members together so they all resolve to one set of library versions.
 #
 # Each member is its own project with its own dependencies and its own entry point, so each can be started on its own. The single lockfile is what stops them drifting onto different versions of the same library mid-week.
+# The Python gateway lives under edge/ beside nginx.conf, because this week the edge is a choice between two implementations rather than a single component.
 [project]
 name = "event-driven"
 version = "0.1.0"
@@ -16,7 +17,7 @@ package = false
 common = { workspace = true }
 
 [tool.uv.workspace]
-members = ["common", "gateway", "checkout", "inventory", "analytics"]
+members = ["common", "edge/gateway", "checkout", "inventory", "analytics"]
 
 [dependency-groups]
 dev = [

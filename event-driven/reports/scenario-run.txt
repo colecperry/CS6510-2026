@@ -1,0 +1,74 @@
+==============================================================
+Scenario 1: inventory is down while shoppers keep paying
+==============================================================
+  inventory stopped
+  20 baskets, 3 items each, with nothing listening for the sales:
+  baskets paid for:        20/20
+  receipts fully itemised: 20/20
+  sales waiting in the broker: inventory.sales	20
+  messages checkout still owes: 0
+  inventory back up on 8082 after 2s
+  after inventory comes back:
+  sales waiting in the broker: inventory.sales	0
+Outbox drained after 0s
+Stock invariant, checked across the checkout and inventory stores
+  SKUs negative:              0
+  SKUs exact:                 2000
+  explained by selling out:   0
+  unexplained violations:     0
+
+Sales, announced against applied
+  announced by checkout:      20
+  applied by inventory:       20
+
+==============================================================
+Scenario 2: the broker is down while shoppers keep paying
+==============================================================
+  20 baskets, 3 items each, with nowhere to announce them:
+  baskets paid for:        20/20
+  receipts fully itemised: 20/20
+  messages checkout still owes: 20
+  broker back, waiting for the relay to catch up
+  messages checkout still owes: 0
+Outbox drained after 0s
+Stock invariant, checked across the checkout and inventory stores
+  SKUs negative:              0
+  SKUs exact:                 2000
+  explained by selling out:   0
+  unexplained violations:     0
+
+Sales, announced against applied
+  announced by checkout:      20
+  applied by inventory:       20
+
+==============================================================
+Scenario 3: analytics is down while shoppers keep scanning
+==============================================================
+  scan latency with analytics running:
+  scans:  2278
+  median: 4.13 ms
+  p95:    5.69 ms
+  analytics stopped
+  scan latency with analytics stopped:
+  scans:  7120
+  median: 3.94 ms
+  p95:    5.72 ms
+  scans waiting in the broker: analytics.scans	7120
+  analytics back up on 8083 after 2s
+  scans waiting in the broker: analytics.scans	0
+  the ranking after analytics catches up:
+{
+    "windowSize": 1000,
+    "slideInterval": 500,
+    "windowStart": 7923,
+    "windowEnd": 8923,
+    "computedAt": "2026-10-31T05:33:55.732566Z",
+    "items": [
+        {
+            "sku": "SKU-000001",
+            "name": "Item 1",
+            "scanCount": 1000,
+            "rank": 1
+        }
+    ]
+}

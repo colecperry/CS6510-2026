@@ -143,14 +143,14 @@ US5 is P1 but comes last, because evidence can only be gathered from a finished 
 
 **Independent Test**: Stop a service, drive traffic, restart it, confirm the work is reflected.
 
-- [ ] T049 [US4] Write `event-driven/scripts/stop_one.sh` taking a service name and a `--start` flag, so a single service can be stopped and restarted without touching the others
-- [ ] T050 [US4] Write `event-driven/scripts/measure_lag.sh` which pays for a basket, polls stock until the reduction lands, and prints the delay. FR-011 requires this number stated, not estimated
-- [ ] T051 [US4] Run the inventory-down scenario with `event-driven/scripts/stop_one.sh inventory`: stop inventory, pay for baskets, confirm every payment returns 200 with a full receipt, restart inventory, confirm the invariant holds exactly. Record the result
-- [ ] T052 [US4] Run the broker-down scenario with `docker compose stop rabbitmq` from `event-driven/`: stop RabbitMQ, pay for baskets, confirm every payment still returns 200, restart the broker, confirm the relay drains and the invariant holds. A failure here means something publishes inside the request path
-- [ ] T053 [US4] Run the analytics-down scenario with `event-driven/scripts/stop_one.sh analytics`: stop analytics, scan for 30 seconds, confirm scan latency is unchanged, restart analytics, confirm those scans reach the ranking
-- [ ] T054 [US4] Measure and record the bound on undelivered messages in `event-driven/README.md`: how many scans the `MAX_PENDING` queue in `event-driven/checkout/app/ingest.py` holds before shedding, and how long the durable queue can accumulate before the broker's own limit applies (FR-019)
-- [ ] T055 [US4] Write `event-driven/checkout/tests/test_relay_retry.py` proving an unsendable message stays unsent and is retried, rather than being marked sent or dropped
-- [ ] T056 [US4] Record each scenario's outcome in `event-driven/reports/resilience-scenarios.md` for the write-up, with the commands used, so the figures in QUALITY-ATTRIBUTES are transcribed rather than recalled
+- [X] T049 [US4] Write `event-driven/scripts/stop_one.sh` taking a service name and a `--start` flag, so a single service can be stopped and restarted without touching the others
+- [X] T050 [US4] Write `event-driven/scripts/measure_lag.sh` which pays for a basket, polls stock until the reduction lands, and prints the delay. FR-011 requires this number stated, not estimated
+- [X] T051 [US4] Run the inventory-down scenario with `event-driven/scripts/stop_one.sh inventory`: stop inventory, pay for baskets, confirm every payment returns 200 with a full receipt, restart inventory, confirm the invariant holds exactly. Record the result
+- [X] T052 [US4] Run the broker-down scenario with `docker compose stop rabbitmq` from `event-driven/`: stop RabbitMQ, pay for baskets, confirm every payment still returns 200, restart the broker, confirm the relay drains and the invariant holds. A failure here means something publishes inside the request path
+- [X] T053 [US4] Run the analytics-down scenario with `event-driven/scripts/stop_one.sh analytics`: stop analytics, scan for 30 seconds, confirm scan latency is unchanged, restart analytics, confirm those scans reach the ranking
+- [X] T054 [US4] Measure and record the bound on undelivered messages in `event-driven/README.md`: how many scans the `MAX_PENDING` queue in `event-driven/checkout/app/ingest.py` holds before shedding, and how long the durable queue can accumulate before the broker's own limit applies (FR-019)
+- [X] T055 [US4] Write `event-driven/checkout/tests/test_relay_retry.py` proving an unsendable message stays unsent and is retried, rather than being marked sent or dropped
+- [X] T056 [US4] Record each scenario's outcome in `event-driven/reports/resilience-scenarios.md` for the write-up, with the commands used, so the figures in QUALITY-ATTRIBUTES are transcribed rather than recalled
 
 **Checkpoint**: three outages survived, one lag figure measured, one shedding bound stated.
 
@@ -162,14 +162,14 @@ US5 is P1 but comes last, because evidence can only be gathered from a finished 
 
 **Independent Test**: All seven endpoints behave identically behind each edge, and edge CPU is compared.
 
-- [ ] T057 [US3] Move `event-driven/gateway/` to `event-driven/edge/gateway/` and update the workspace members list, so both edges sit side by side
-- [ ] T058 [US3] Write `event-driven/edge/nginx.conf` routing `/transactions` to 8081, `/items` and `/inventory` to 8082, and `/analytics` to 8083, with longest-prefix matching, listening on 8080
-- [ ] T059 [US3] Confirm `event-driven/edge/nginx.conf` exposes only the seven public paths and returns 404 for anything else, matching the Python gateway's behaviour exactly (FR-015)
-- [ ] T060 [US3] Set `proxy_http_version 1.1` and keepalive upstreams in `event-driven/edge/nginx.conf`, with a comment saying the previous weeks' servers refuse the HTTP/2 upgrade and why that patch exists
-- [ ] T061 [US3] Rewrite `event-driven/scripts/start_all.sh` to take `--edge=nginx` or `--edge=python`, starting exactly one and refusing to start both, since a run with both measures neither
-- [ ] T062 [US3] Update `event-driven/scripts/stop_all.sh` to stop whichever edge is running, including a natively installed nginx
-- [ ] T063 [US3] Run `event-driven/scripts/smoke_test.sh` behind each edge in turn and diff the two outputs, confirming every response shape and status code is identical
-- [ ] T064 [US3] Write `event-driven/scripts/measure_cpu.sh` sampling each process's CPU during a run, so the edge comparison has a number beside the throughput one
+- [X] T057 [US3] Move `event-driven/gateway/` to `event-driven/edge/gateway/` and update the workspace members list, so both edges sit side by side
+- [X] T058 [US3] Write `event-driven/edge/nginx.conf` routing `/transactions` to 8081, `/items` and `/inventory` to 8082, and `/analytics` to 8083, with longest-prefix matching, listening on 8080
+- [X] T059 [US3] Confirm `event-driven/edge/nginx.conf` exposes only the seven public paths and returns 404 for anything else, matching the Python gateway's behaviour exactly (FR-015)
+- [X] T060 [US3] Set `proxy_http_version 1.1` and keepalive upstreams in `event-driven/edge/nginx.conf`, with a comment saying the previous weeks' servers refuse the HTTP/2 upgrade and why that patch exists
+- [X] T061 [US3] Rewrite `event-driven/scripts/start_all.sh` to take `--edge=nginx` or `--edge=python`, starting exactly one and refusing to start both, since a run with both measures neither
+- [X] T062 [US3] Update `event-driven/scripts/stop_all.sh` to stop whichever edge is running, including a natively installed nginx
+- [X] T063 [US3] Run `event-driven/scripts/smoke_test.sh` behind each edge in turn and diff the two outputs, confirming every response shape and status code is identical
+- [X] T064 [US3] Write `event-driven/scripts/measure_cpu.sh` sampling each process's CPU during a run, so the edge comparison has a number beside the throughput one
 
 **Checkpoint**: one command switches edges, and nothing else about the system moves when it does.
 
