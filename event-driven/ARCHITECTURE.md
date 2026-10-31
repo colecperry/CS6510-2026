@@ -10,49 +10,45 @@ Everything a service needs to tell another one, it announces to the broker inste
 ## The diagram
 
 ```
-                              load client
-                                   |
-                                   | HTTP, one address
-                                   v
-                     +-------------------------+
-                     |   edge, port 8080       |   one of two, never both
-                     |   nginx  OR  gateway    |   routes by path, no logic
-                     +-------------------------+
-                        /          |          \
-             /transactions     /items        /analytics
-                      /        /inventory          \
-                     v            v                 v
-          +-----------+   +-----------+   +-----------+
-          | checkout  |   | inventory |   | analytics |
-          |   :8081   |   |   :8082   |   |   :8083   |
-          +-----------+   +-----------+   +-----------+
-               |  ^            |  ^            |  ^
-               v  |            v  |            v  |
-          +--------+      +--------+      +--------+
-          | pg 5440|      | pg 5441|      | pg 5442|
-          |baskets |      | stock  |      |scan log|
-          |outbox  |      |applied |      |ranking |
-          +--------+      +--------+      +--------+
-               |               ^               ^
-               |               |               |
-    publishes  |               | sale.completed| items.scanned
-               v               |               |
-   +---------------------------------------------------------+
-   |            RabbitMQ, port 5672 (UI on 15672)             |
-   |                                                          |
-   |     exchange "selfcheckout"  (topic, durable)            |
-   |            |                          |                  |
-   |   sale.completed             items.scanned               |
-   |            v                          v                  |
-   |   queue inventory.sales      queue analytics.scans       |
-   |   (durable, quorum)          (durable, quorum)           |
-   +---------------------------------------------------------+
+                                              load client
+                                                   |
+                                                   | HTTP, one address
+                                                   v
+                                      +-------------------------+
+                                      |     edge, port 8080     |    one of two, never both
+                                      |   nginx OR gateway      |    routes by path, no logic
+                                      +-------------------------+
+                                                   |
+                     +-----------------------------+-----------------------------+
+                     |                             |                             |
+               /transactions              /items, /inventory                /analytics
+                     |                             |                             |
+                     v                             v                             v
+   +--------+  +-----------+     +--------+  +-----------+     +--------+  +-----------+
+   |pg 5440 |<>| checkout  |     |pg 5441 |<>| inventory |     |pg 5442 |<>| analytics |
+   |baskets |  |   :8081   |     | stock  |  |   :8082   |     |scan log|  |   :8083   |
+   | outbox |  +-----------+     |applied |  +-----------+     |ranking |  +-----------+
+   +--------+        |           +--------+        ^           +--------+        ^
+                     |                             |                             |
+     publishes both  |       from inventory.sales  |       from analytics.scans  |
+                     v                             |                             |
+   +-----------------------------------------------------------------------------------+
+   |                  RabbitMQ, port 5672   (management UI on 15672)                   |
+   |                                                                                   |
+   |                    exchange "selfcheckout"   (topic, durable)                     |
+   |                         |                                |                        |
+   |                  sale.completed                    items.scanned                  |
+   |                         v                                v                        |
+   |               queue inventory.sales            queue analytics.scans              |
+   |                 (durable, quorum)                (durable, quorum)                |
+   |               persistent, confirmed          transient, not confirmed             |
+   +-----------------------------------------------------------------------------------+
 ```
 
-Arrows into the broker are publishes; arrows out of it are subscriptions.
-Checkout only ever publishes.
-Inventory and analytics only ever subscribe.
-No arrow goes from one service to another.
+Every line into or out of the broker starts at a service, never at a database.
+Checkout only ever publishes; inventory and analytics only ever subscribe.
+Each database touches exactly one service and nothing else.
+No line goes from one service to another, which is the whole claim this week makes.
 
 ## Who owns what
 
