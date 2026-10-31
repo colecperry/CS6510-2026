@@ -181,16 +181,16 @@ US5 is P1 but comes last, because evidence can only be gathered from a finished 
 
 **Independent Test**: Open the repository and find each artefact present and readable.
 
-- [ ] T065 [US5] Write `event-driven/scripts/run_all_benchmarks.sh` performing all four runs with a database reset and a service restart between each, and refusing to proceed if the outbox has not drained
-- [ ] T066 [US5] Run the graded pair against the nginx edge into `event-driven/reports/`: default parameters, then 100 stations over 120 seconds
-- [ ] T067 [US5] Run the comparison pair against the Python gateway edge into `event-driven/reports/comparison/`, at the same two parameter sets
-- [ ] T068 [US5] Check the invariant after every one of the four runs with `event-driven/scripts/check_invariant.sh`, and make that script wait for the outbox to drain rather than reporting a message in flight as a violation
-- [ ] T069 [US5] Write `event-driven/ARCHITECTURE.md` with the diagram: three services, three stores, the broker with its exchange and two queues, both edges, and which message flows where. This is the graded point
-- [ ] T070 [US5] Write `event-driven/README.md` covering setup, the nginx dependency and its version, exact reproduction commands for all four runs, and a seven-way results table across every week
-- [ ] T071 [US5] Write `event-driven/QUALITY-ATTRIBUTES.md` analysing what events bought and cost, reporting the edge effect and the communication effect as separate numbers, and stating what was verified against what was assumed
-- [ ] T072 [US5] Record the Principle III amendment in `event-driven/QUALITY-ATTRIBUTES.md` with its reasoning, as FR-025 and the constitution's Governance section require
-- [ ] T073 [US5] Record the self-containment deviation for natively installed nginx in `event-driven/QUALITY-ATTRIBUTES.md`, with why comparability was chosen over it
-- [ ] T074 [US5] Write the section in `event-driven/QUALITY-ATTRIBUTES.md` on what the saga's disappearance means, naming the four files deleted and why a guaranteed message replaced them. This is the week's most interesting result
+- [X] T065 [US5] Write `event-driven/scripts/run_all_benchmarks.sh` performing all four runs with a database reset and a service restart between each, and refusing to proceed if the outbox has not drained
+- [X] T066 [US5] Run the graded pair against the nginx edge into `event-driven/reports/`: default parameters, then 100 stations over 120 seconds
+- [X] T067 [US5] Run the comparison pair against the Python gateway edge into `event-driven/reports/comparison/`, at the same two parameter sets
+- [X] T068 [US5] Check the invariant after every one of the four runs with `event-driven/scripts/check_invariant.sh`, and make that script wait for the outbox to drain rather than reporting a message in flight as a violation
+- [X] T069 [US5] Write `event-driven/ARCHITECTURE.md` with the diagram: three services, three stores, the broker with its exchange and two queues, both edges, and which message flows where. This is the graded point
+- [X] T070 [US5] Write `event-driven/README.md` covering setup, the nginx dependency and its version, exact reproduction commands for all four runs, and a seven-way results table across every week
+- [X] T071 [US5] Write `event-driven/QUALITY-ATTRIBUTES.md` analysing what events bought and cost, reporting the edge effect and the communication effect as separate numbers, and stating what was verified against what was assumed
+- [X] T072 [US5] Record the Principle III amendment in `event-driven/QUALITY-ATTRIBUTES.md` with its reasoning, as FR-025 and the constitution's Governance section require
+- [X] T073 [US5] Record the self-containment deviation for natively installed nginx in `event-driven/QUALITY-ATTRIBUTES.md`, with why comparability was chosen over it
+- [X] T074 [US5] Write the section in `event-driven/QUALITY-ATTRIBUTES.md` on what the saga's disappearance means, naming the four files deleted and why a guaranteed message replaced them. This is the week's most interesting result
 
 **Checkpoint**: everything the grader opens is present.
 
@@ -198,13 +198,13 @@ US5 is P1 but comes last, because evidence can only be gathered from a finished 
 
 ## Phase 8: Polish and Cross-Cutting Concerns
 
-- [ ] T075 Write `event-driven/scripts/check_figures.py` comparing every number quoted in `README.md` and `QUALITY-ATTRIBUTES.md` against the four report JSON files, exiting non-zero on a mismatch, and run it
-- [ ] T076 Run the mechanical checks over every file written or changed under `event-driven/`: no hard-wrapped comments, no em dash, every source file opening with a two or three line header, shebangs intact, markdown tables aligned
-- [ ] T077 Confirm every file in `event-driven/` opens with a header saying what it is for, in particular the new `bus/` packages and `outbox.py`
-- [ ] T078 Sweep the comments copied into `event-driven/` for staleness: anything still describing a saga, a compensation, a retry budget or a direct call to inventory is now wrong and must go
-- [ ] T079 Confirm every parameter and return value in the new code under `event-driven/` is annotated, including the broker handler signatures, per the type annotation rule
-- [ ] T080 Run every suite under `event-driven/{checkout,inventory,analytics}/tests/` from its own directory, and `event-driven/tests/` from the workspace root, and report pass counts
-- [ ] T081 State explicitly in `event-driven/QUALITY-ATTRIBUTES.md` what was verified by running it and what was assumed, as Principle IV requires
+- [X] T075 Write `event-driven/scripts/check_figures.py` comparing every number quoted in `README.md` and `QUALITY-ATTRIBUTES.md` against the four report JSON files, exiting non-zero on a mismatch, and run it
+- [X] T076 Run the mechanical checks over every file written or changed under `event-driven/`: no hard-wrapped comments, no em dash, every source file opening with a two or three line header, shebangs intact, markdown tables aligned
+- [X] T077 Confirm every file in `event-driven/` opens with a header saying what it is for, in particular the new `bus/` packages and `outbox.py`
+- [X] T078 Sweep the comments copied into `event-driven/` for staleness: anything still describing a saga, a compensation, a retry budget or a direct call to inventory is now wrong and must go
+- [X] T079 Confirm every parameter and return value in the new code under `event-driven/` is annotated, including the broker handler signatures, per the type annotation rule
+- [X] T080 Run every suite under `event-driven/{checkout,inventory,analytics}/tests/` from its own directory, and `event-driven/tests/` from the workspace root, and report pass counts
+- [X] T081 State explicitly in `event-driven/QUALITY-ATTRIBUTES.md` what was verified by running it and what was assumed, as Principle IV requires
 - [ ] T082 Commit `event-driven/` in full, push, and confirm the submission URL resolves to a repository containing all four reports and the diagram
 
 ---

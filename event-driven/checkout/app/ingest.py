@@ -18,7 +18,7 @@ MAX_PENDING = 50_000
 
 
 class ScanWriter:
-    def __init__(self, publisher: CheckoutPublisher):
+    def __init__(self, publisher: CheckoutPublisher) -> None:
         self._publisher = publisher                           # where a batch is handed to the broker
         self._queue: asyncio.Queue[str] = asyncio.Queue(maxsize=MAX_PENDING)
         self._task: asyncio.Task | None = None

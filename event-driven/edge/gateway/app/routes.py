@@ -12,7 +12,7 @@ INVENTORY = os.environ.get("INVENTORY_URL", "http://localhost:8082")
 ANALYTICS = os.environ.get("ANALYTICS_URL", "http://localhost:8083")
 
 # Longest matching prefix wins, so the order here does not matter.
-# These are the seven public endpoints and nothing else. The services also expose /internal paths that they use to coordinate a payment between themselves, and those are deliberately absent here, so no caller can reach one from outside.
+# These are the seven public endpoints and nothing else. Until this week the services also exposed /internal paths for coordinating a payment between themselves; those are gone, because services no longer call each other at all.
 ROUTES = {
     "/transactions": CHECKOUT,
     "/items": INVENTORY,

@@ -14,7 +14,7 @@ class LowStockRow(NamedTuple):
 
 
 class StockRepo:
-    def __init__(self, pool: asyncpg.Pool):
+    def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
     async def below_threshold(self, threshold: int) -> list[LowStockRow]:

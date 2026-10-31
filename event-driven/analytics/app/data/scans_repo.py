@@ -13,7 +13,7 @@ class ScanCount(NamedTuple):
 
 
 class ScansRepo:
-    def __init__(self, pool: asyncpg.Pool):
+    def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
     async def record_scans(self, skus: list[str]) -> int:

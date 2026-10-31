@@ -111,7 +111,7 @@ Two places hold work that has not been delivered, and they shed it differently.
 
 Scans waiting to leave checkout sit in an in-memory queue capped at 50,000 (`MAX_PENDING` in `checkout/app/ingest.py`).
 Above that, new scans are counted and dropped rather than blocking a sale.
-At the roughly 1,300 scans per second the stress run produces, that is about 38 seconds of total broker unavailability before the first scan is shed.
+At the 1,767 scans per second the stress run produces, that is about 28 seconds of total broker unavailability before the first scan is shed.
 
 Sales waiting in the broker have no queue-level limit.
 RabbitMQ stops accepting publishes when free disk falls below `disk_free_limit`, which is 50 MB on this broker against 971 GB free.
@@ -122,4 +122,4 @@ A sale message is a few hundred bytes, so the practical bound is the disk, and a
 Verified by running it: all three outages, the lag figures, the scan latency comparison, the queue depths, and the invariant after each scenario.
 
 Assumed: the disk bound above is read from the broker's configured limit and arithmetic, not from filling a disk.
-The 38 second figure for scan shedding uses the stress run's scan rate rather than having been reproduced under a real 38 second outage.
+The 28 second figure for scan shedding is the queue size divided by the stress run's measured scan rate, not something reproduced under a real 28 second outage.

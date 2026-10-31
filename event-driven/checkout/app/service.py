@@ -23,7 +23,7 @@ class CheckoutService:
         catalog: CatalogRepo,
         outbox: OutboxRepo,
         scans: ScanWriter,
-    ):
+    ) -> None:
         self._pool = pool              # held only so paying can be one transaction
         self._baskets = baskets        # baskets and receipts
         self._catalog = catalog        # prices, from memory

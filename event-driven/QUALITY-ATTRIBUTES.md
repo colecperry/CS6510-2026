@@ -1,208 +1,251 @@
 # Quality Attributes and Architectural Characteristics
 
-Week 6: microservices, each owning its own database, with payment coordinated across two of them.
-Performance claims come from the two runs in `reports/`, compared against the previous four weeks' reports.
+Week 7: the services stop calling each other and talk through a message broker instead, and nginx replaces the hand-written Python gateway at the edge.
 
-Week 5 asked what splitting the code into services cost, and the answer was most of the throughput, all of it the gateway's fault.
-This week asks a narrower question: what does giving each service its own database cost, on top of that.
+Two changes in one week, which the project's own rules say to avoid.
+The answer was not to do one of them, but to measure both: four load runs, two parameter sets against each edge, so the events and the edge can be told apart.
+Every number below comes from `reports/`, `reports/comparison/` or `reports/resilience-scenarios.md`.
 
-## Part 1: What database-per-service changed
+---
 
-### The coupling that was left is now gone
+## Part 1: What events changed
 
-Week 5's services were divided by business function but shared one database, so the brief's own phrasing was that coupling "occurs at the database access layer".
-That was literally true: `common/` held every SQL statement, and checkout could read inventory's stock table by writing one import.
+### The saga dissolved, and that is the week's real content
 
-This week `common/` holds the wire contract, the domain errors, and the mechanics of opening a pool.
-It holds no SQL at all.
-Each query lives in the single service that owns its table, and each service is handed one database URL, its own.
+Week 6's payment spanned two services.
+Checkout called inventory over HTTP to reduce stock, then marked the basket paid in its own database.
+Two commits in two systems with a network call in between, which cannot be made atomic, so it needed machinery to repair the cases where only one half happened:
 
-The claim is checked rather than asserted.
-`tests/test_boundaries.py` reads the source and fails if a service names a table it does not own, constructs another service's settings, or carries an HTTP client it has no reason to have.
-Each of those checks was verified by planting a violation and watching it fail.
+| File                                   | What it was for                                                               |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| `checkout/app/saga/coordinator.py`     | Ran the two steps in order and compensated when the second failed             |
+| `checkout/app/saga/recovery.py`        | At startup, found payments caught in the middle and finished or reversed them |
+| `checkout/app/data/saga_repo.py`       | The `payment_saga` table recording how far each payment had got               |
+| `inventory/app/api/internal_routes.py` | `/internal/stock/reduce` and its compensating undo                            |
 
-### Payment became a saga, and that is the week's real content
+All four are deleted.
+Nothing replaced them.
 
-In every week up to now, paying was one database transaction: mark the basket paid, reduce the stock, both or neither.
+Every one of them existed to answer a single question: **did the stock reduction happen?**
+A message the broker guarantees to deliver removes the question.
+Checkout writes "this sale happened" into its own database in the same transaction that marks the basket paid, and delivery is then somebody else's problem and can be retried forever.
 
-Those two writes now live in different Postgres instances, and no transaction can span them.
-What replaces it is a sequence with a record and a way back:
+The basket's second lock went with it.
+Week 6's scan statement had to guard on `paying_since IS NULL` as well as the status, because paying spanned two transactions and left a window the status alone could not cover.
+Paying is one transaction now, so the status is enough, and `checkout/app/data/baskets_repo.py` is one condition shorter.
 
-| Step | Where           | What is recorded                                        |
-|------|-----------------|---------------------------------------------------------|
-| 1    | checkout store  | basket claimed, and what this payment intends to reduce |
-| 2    | inventory store | the stock change, keyed so a repeat is ignored          |
-| 3    | checkout store  | basket paid, saga done                                  |
+### The dual-write problem, and why the outbox is the answer
 
-**Stock goes first deliberately.**
-Both orders have a window where a crash leaves the two halves disagreeing, but they fail in opposite directions.
-Stock-first leaves the shop believing it has less than it does, which cannot oversell.
-Paid-first would hand a shopper a receipt for stock still on the shelf.
+A sale has to do two things that must either both happen or neither: mark the basket paid, and ensure stock comes down.
+Those live in a database and a broker, two systems, which cannot be committed together.
 
-**Three separate mechanisms exist because they cover three different failures**, and it is worth being precise about which covers what:
+- **Commit the basket, then publish.** The process dies in between: the sale is never announced, and stock stays on the shelf forever for something that was sold.
+- **Publish, then commit the basket.** The process dies in between: stock comes down for a sale that was never made. The items are physically still on the shelf, but the system believes they are gone, so real inventory becomes unsellable.
 
-- *A step returns an error*: the coordinator undoes what was applied and refuses the payment.
-- *A reply goes missing*: the client retries, and inventory recognises the repeated key and changes nothing.
-- *The process dies*: nothing is left running to compensate, so the saga row is read at the next startup and driven to an ending.
+Writing the message into the sender's own database, inside the same transaction, turns two commits into one.
+After that there is nothing left to lose, only something left to deliver.
 
-Only the third needed a durable record.
-The brief asked for coordination, not for crash survival, so that part is beyond what was strictly required and is kept because "what if it dies here" is the obvious question about this design.
+`checkout/tests/test_outbox.py` proves both halves against a real database: a paid basket always has its message, and a failed message write always leaves the basket open.
 
-### Inventory must be exact, and still is
+### At least once, applied exactly once
 
-The constitution requires that for every SKU, stock sold equals stock reduced, and that inventory may not lag.
-That was the hardest thing to keep, because the usual saga answer is eventual consistency.
+No broker delivers exactly once.
+RabbitMQ promises at least once, which means a message may arrive twice after a network blip or a consumer crash.
 
-It holds because stock is reduced before the receipt is returned, not after.
-A shopper is never given a receipt for stock that has not come off the shelf.
-Both runs confirm it: 2,000 SKUs exact, zero negative, zero unexplained, across two databases that cannot see each other.
+Inventory makes that harmless by keying on the message id and letting the insert be the check:
 
-## Part 2: What it cost
+```sql
+INSERT INTO applied_requests (message_id, lines)
+VALUES ($1, $2::jsonb)
+ON CONFLICT (message_id) DO NOTHING
+RETURNING message_id
+```
 
-### Throughput fell 9% at default load and 26% under stress
+A row comes back: this copy is the first, so stock moves.
+Nothing comes back: this is a repeat, so nothing happens.
+There is no window between looking and acting, which satisfies the project's rule that a guard must live inside the statement it guards.
 
-|                 | service-based | microservices | change |
-|-----------------|---------------|---------------|--------|
-| Default, tx/sec | 45.1          | 41.0          | -9%    |
-| Stress, tx/sec  | 37.6          | 27.8          | -26%   |
+This is the same mechanism week 6 used, re-keyed.
+Week 6 keyed on a request id checkout invented for the call; this week keys on the outbox row's own id, which is the thing that travels with the message.
 
-**I predicted the first number and missed the second.**
-The plan said throughput would "stay near week 5's 45 tx/sec" because the gateway, not checkout, was the cap.
-Default landed at 41.0, close enough.
-Stress landed at 27.8, which is a quarter below week 5 and was not predicted.
+### Choreography, not orchestration
 
-The explanation is arithmetic rather than mystery, and it is about the shape of the test.
-The load client runs a fixed number of stations, each doing one transaction at a time, so throughput is stations divided by the time one transaction takes.
-At 100 stations, week 5 averaged 2.66 seconds per transaction and this week averages 3.60.
-Anything that adds latency therefore removes throughput directly, and the saga added a network round trip plus a second commit to every payment.
+Week 6 was orchestration: checkout knew that paying meant reducing stock, and told inventory to do it.
 
-What I got wrong was assuming a saturated gateway sets the throughput floor.
-It sets a ceiling, not a floor: the system can be slower than the gateway allows, and under stress it now is.
+This week is choreography.
+Checkout announces `sale.completed` and stops.
+Inventory decides for itself that a completed sale means stock comes down.
+Checkout does not know inventory exists, would not know if it refused, and nothing in checkout would change if a fourth service started listening to the same message.
 
-### Completion got substantially slower
+The cost is that nothing in the system states the whole flow in one place.
+Understanding what a payment does means reading the publisher and then separately finding whoever subscribes, which is what `ARCHITECTURE.md` exists to compensate for.
 
-| COMPLETE p95 | service-based | microservices | change |
-|--------------|---------------|---------------|--------|
-| Default      | 30.58ms       | 47.05ms       | +54%   |
-| Stress       | 486.44ms      | 734.76ms      | +51%   |
+---
 
-This is the cost landing exactly where the design said it would.
-One local transaction became two commits in separate databases with an HTTP call between them, and the measurement is roughly what that costs.
+## Part 2: What the edge changed
 
-### Scanning was almost untouched
+### The gateway was the bottleneck, and now that is proven rather than suspected
 
-| SCAN p95 | service-based | microservices | change |
-|----------|---------------|---------------|--------|
-| Default  | 28.30ms       | 29.96ms       | +6%    |
-| Stress   | 490.93ms      | 749.83ms      | +53%   |
+Weeks 5 and 6 both named the Python gateway as the probable ceiling.
+Neither could show it, because there was nothing to compare against.
 
-At default load the scan path is essentially unchanged, which was the goal.
-Scans still go to an in-memory queue and the request ends there; only the destination changed from a shared table to another service's endpoint.
+This week there is.
+The two event-driven columns in the README differ only in which process holds port 8080.
 
-Under stress it rose with everything else, which reflects general queueing rather than new work on the scan path.
+|                           | Python gateway  | nginx | Change           |
+| ------------------------- | --------------- | ----- | ---------------- |
+| Transactions/sec, default | 37.8            | 98.7  | +161%            |
+| Transactions/sec, stress  | 39.3            | 168.2 | +328%            |
+| Edge CPU, default         | 86.5% of a core | 8.9%  | about one tenth  |
+| Edge CPU, stress          | 94.7% of a core | 11.6% | about one eighth |
 
-### The gateway is still the ceiling, and now it has company
+The same traffic, the same three services behind it, the same routing table.
+One edge saturates a core and caps the system at roughly 39 transactions per second; the other uses a tenth of a core and the cap moves somewhere else.
 
-| CPU during the run | gateway   | checkout | inventory | analytics |
-|--------------------|-----------|----------|-----------|-----------|
-| Default            | **87.3%** | 76.9%    | 7.3%      | 25.6%     |
-| Stress             | **86.3%** | 54.4%    | 5.0%      | 14.7%     |
+**168.2 transactions and 1,767.1 items per second under stress is the fastest result in the series**, past the pipeline's 124.5 and 1,313.7, in the week with the most processes and the most network hops.
 
-Week 5 measured the gateway at 87% of a core with checkout at 53%, and proved the gateway was the bottleneck by bypassing it.
-The gateway is unchanged this week and sits at the same 87%.
+### Checkout is now the ceiling
 
-Checkout is the number that moved: 52.9% last week, 76.9% this week at the same load.
-That is the saga showing up as work rather than as a diagram. Per transaction, checkout now serialises a request, makes an outbound call, waits, and commits twice.
+With nginx at the edge, checkout runs at 99.5% of a core under stress while inventory sits at 4.8% and analytics at 14.8%.
 
-Inventory and analytics remain nearly idle, which says the split was lopsided: one service does almost everything and two answer occasionally.
+That is the next thing to fix, and the architecture makes the fix available: checkout is stateless with respect to the broker, so a second copy would take half the traffic and the durable quorum queues would share the work.
+Week 6 could not do that so cleanly, because the saga coordinator's recovery pass assumed one process owned the repair.
 
-### Correctness is no longer enforceable by the database
+---
 
-Every previous week checked the stock invariant with one SQL query, because units sold and units remaining sat in the same database and a join could see both.
+## Part 3: What it cost
 
-They are now in separate instances with no connection between them.
-The check reads each store, pulls both sides into memory, and compares them in Python.
+### Payment is eventually consistent, which amends Principle III
 
-The invariant did not get weaker, but the thing guaranteeing it moved out of the storage engine and into a script we wrote and have to maintain.
-That is a real loss, and the kind that is easy not to notice: a program can have a bug, where a `JOIN` cannot.
+The project's constitution says:
+
+> Inventory MUST be exact. Analytics MAY lag, and the amount it may lag MUST be stated.
+
+That is amended this week to: **inventory may also lag, and the amount is stated below.**
+
+A receipt is returned before stock has moved.
+For a measured median of 48.8 ms the system has sold something it has not yet taken off the shelf.
+
+The invariant itself is unchanged and still holds exactly.
+`scripts/check_invariant.sh` waits for the outbox to drain and then compares units sold against units gone, across both databases, and all four runs came back with zero unexplained violations and announced sales exactly matching applied ones.
+
+**Why the amendment was taken rather than avoided.**
+Keeping inventory exact at the moment of payment requires the shopper to wait for inventory, which is the coupling this week exists to remove.
+Week 6 shipped that version and its cost is on record: an inventory outage returned HTTP 503 to the shopper, a failed sale caused by a service the shopper was not buying from.
+Choosing a 48.8 ms window over a failed sale is the same trade the constitution already makes for analytics, applied one table further along.
+
+**The honest regression: under saturation the window is seconds, not milliseconds.**
+At default load the outbox was empty the instant the run ended.
+Under stress it took 48 seconds to drain after the run finished.
+
+The cause is measured, not guessed: checkout runs at 99.5% of a core under stress, and the relay shares an event loop with the request handlers, so it gets starved exactly when there is most to deliver.
+The fix is to move the relay into its own process, which costs a deployment unit and was not worth doing this week.
+
+Stated plainly, so nobody has to find it out: **this system's stock figure can be up to roughly a minute stale while it is saturated.**
+
+### Correctness is still not enforceable by the database, and now it is further away
+
+Week 5 and earlier checked the invariant with one SQL query, because units sold and units remaining lived in the same place.
+Week 6 split them across two databases, so the check became a program that reads both.
+
+This week adds a second complication.
+A difference between the two stores is now ambiguous: it may mean something is wrong, or it may mean a message is still in flight.
+The check has to wait for the outbox before it can compare anything at all, which means **there is no instant at which the system can be asked whether it is correct and answer immediately.**
+
+That is a real loss and it is inherent to the style, not to this implementation.
 
 ### New failure modes
 
-Splitting the stores created failures that could not previously exist:
+| Failure                       | What happens                                              | Covered by                                                    |
+| ----------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| Broker unreachable at publish | The row stays unsent and the relay retries with a backoff | `test_relay_retry.py`, scenario 2                             |
+| Broker restarts               | Sales survive, queued scans do not                        | Not exercised; stated as the known limit                      |
+| Message delivered twice       | Inventory recognises the id and does nothing              | `test_idempotency.py`                                         |
+| Consumer crashes mid-handling | Not acknowledged, so redelivered                          | Manual ack in `common/bus.py`                                 |
+| Relay dies                    | Stock stops moving and nothing says so                    | Mitigated by catching everything in the loop, not by alerting |
+| Checkout saturated            | The relay is starved and the lag grows to seconds         | Measured: 48s under stress                                    |
 
-- **A payment can be left part way** if checkout dies between the two writes. Handled by recovery at startup, which cannot run until the process comes back.
-- **A payment can be refused because another service is down.** The contract defines no status code for "a service we depend on is unavailable", so this returns 409, which is semantically wrong but is the least wrong of the three the contract allows.
-- **A basket can be locked out.** If compensation itself cannot reach inventory, `paying_since` is never cleared and the shopper cannot scan or retry until checkout restarts. This contradicts FR-013, which requires the basket to be left in a state the shopper can retry from. It is deliberate: releasing a basket whose stock may already be down invites a second payment and a double deduction, and the constitution makes stock exactness the thing not to trade. **Recorded here rather than fixed.**
-- **Scans can be lost outright.** If analytics is down, batches are counted and abandoned rather than retried, because a writer stuck retrying backs the queue up and starts dropping scans anyway. During testing, 120 batches were lost this way and are not recoverable.
+The last two are the ones that would bite in production.
+A relay that stops delivering looks exactly like a working system until someone notices stock has not moved, and nothing here would tell them.
 
-None of these can lose money. All of them are on paths the constitution allows to degrade, except the basket lock, which is recorded above as a known violation.
+### A deviation: nginx is installed natively, not containerised
+
+Every week so far has been self-contained: `docker compose up -d` and `uv sync` and nothing else.
+This week needs nginx installed on the machine.
+
+That was chosen over comparability's alternative deliberately.
+A container on macOS reaches the host through a network translation layer that a host process on loopback does not pay.
+Putting one edge behind that and not the other would have measured Docker rather than the edge, and the edge comparison is most of what this week found.
+
+The cost is one extra install step, documented in the README with the exact version tested.
 
 ### Complexity, honestly
 
-Five new source files, about 370 lines, of which roughly 130 are what the brief strictly asked for.
-The rest is idempotency, forced by the decision to retry, and the durable saga record, forced by wanting the invariant to survive a crash.
+|                                    | Week 6                                    | Week 7                                           |
+| ---------------------------------- | ----------------------------------------- | ------------------------------------------------ |
+| Processes to run                   | 4                                         | 4, plus a broker                                 |
+| Containers                         | 3                                         | 4                                                |
+| Things that can be separately down | 7                                         | 8                                                |
+| Files in `checkout/app/`           | 13                                        | 11                                               |
+| Concepts a reader must hold        | saga, compensation, recovery, idempotency | outbox, relay, exchange, queue, ack, idempotency |
 
-Following a payment now means reading a coordinator, a client, a saga repository, a stock mover on the other side, and a recovery routine. In week 1 it was one function.
+The broker is a whole extra piece of infrastructure, with its own durability settings, its own queue types and its own failure behaviour.
+Against that, checkout got smaller and the hardest thing in it last week, a distributed transaction repaired by hand, is gone.
 
-For this assignment the trade is the point. For a real shop of this size it would not be: one database and one transaction solved the same problem in a tenth of the code, with better numbers.
+It is not obviously a simplification.
+It is a different set of things to understand, and the honest claim is that they are easier things.
 
-## Part 3: Characteristics, revisited
+---
 
-| Characteristic | Week 5 (service-based)                                            | Week 6 (microservices)                                          |
-|----------------|-------------------------------------------------------------------|-----------------------------------------------------------------|
-| Throughput     | 45.1 tx/sec default, 37.6 stress                                  | **41.0 and 27.8**                                               |
-| Scan latency   | 28.30ms p95                                                       | 29.96ms p95, essentially unchanged                              |
-| Completion     | 30.58ms p95                                                       | **47.05ms p95**, the saga's cost                                |
-| Data integrity | held, enforced by one transaction                                 | held, enforced by a sequence plus compensation and recovery     |
-| Verifiability  | one SQL query could prove the invariant                           | **a program must read two databases to prove it**               |
-| Coupling       | shared database; any service could read any table                 | each store reachable only by its owner, checked by a test       |
-| Independence   | services shared a database, so none could be deployed truly alone | each has its own store and starts with the others stopped       |
-| Availability   | one database was a single point of failure                        | three, so one failing takes down less, but payment needs two up |
-| Reliability    | a failed step could not leave a half state                        | it can, and is repaired at the next startup                     |
-| Error rate     | 0.00% both runs                                                   | 0.00% both runs                                                 |
+## Part 4: Characteristics, revisited
 
-**The availability row is the one genuine architectural win**, and it is smaller than it looks.
-Losing the analytics database now costs the ranking and nothing else; shoppers keep shopping.
-Losing inventory's database stops payment but not scanning.
-In week 5, losing the one database stopped everything.
+| Characteristic | Week 6   | Week 7       | Why                                                                         |
+| -------------- | -------- | ------------ | --------------------------------------------------------------------------- |
+| Availability   | Poor     | **Strong**   | Three outages survived with nothing lost and no shopper affected            |
+| Performance    | Poor     | **Strong**   | Fastest in the series under stress, once the edge stopped being the ceiling |
+| Scalability    | Moderate | **Strong**   | Checkout is the bottleneck and can now be run twice                         |
+| Consistency    | Strong   | **Moderate** | Stock is 48.8 ms behind, and up to 48 seconds behind under saturation       |
+| Testability    | Moderate | **Moderate** | Easier units, harder end-to-end: no single place states the whole flow      |
+| Observability  | Poor     | **Moderate** | The management UI shows queue depths, which is more than week 6 offered     |
+| Simplicity     | Poor     | **Poor**     | Fewer concepts in the code, one more piece of infrastructure                |
+| Coupling       | Moderate | **Strong**   | No service holds another's address, checked by reading the source           |
 
-**Independence is the other.**
-Each service was started alone, with the other three stopped, and answered the requests it owns. That was not true last week in any meaningful sense, because all three needed the same database process running.
+---
 
 ## What the measurements showed
 
-|                      | Default (10 stations, 60s) | Stress (100 stations, 120s) |
-|----------------------|----------------------------|-----------------------------|
-| Transactions         | 2,471 (41.0/sec)           | 3,418 (27.8/sec)            |
-| Items scanned        | 25,798 (428.2/sec)         | 35,610 (290.0/sec)          |
-| Error rate           | 0.00%                      | 0.00%                       |
-| START p95            | 29.30ms                    | 936.01ms                    |
-| SCAN p95             | 29.96ms                    | 749.83ms                    |
-| COMPLETE p95         | 47.05ms                    | 734.76ms                    |
-| SKUs exact           | 2,000 of 2,000             | 2,000 of 2,000              |
-| Payments compensated | 0                          | 0                           |
-| Payments unfinished  | 0                          | 0                           |
+1. **The edge was the ceiling all along.** Swapping one process more than quadrupled stress throughput. Two previous weeks suspected this; this is the first week that could show it.
+2. **Events help most under load.** Holding the edge fixed, throughput fell 7.8% at default and rose 41% under stress. Removing a blocking call matters when there is contention and costs a little when there is not.
+3. **The saga was not worth what it cost.** Four files of repair machinery, replaced by one table and a loop, with better availability than before.
+4. **Scans have not changed shape since week 4.** 10.72ms p95 this week against 7.10ms then, through two more hops and a broker, because the design has always been queue it and move on.
+5. **Nothing was lost in any outage.** Including the one case week 6 explicitly accepted losing: scans published while analytics was down.
+6. **The lag is bounded by CPU, not by design.** 48.8 ms when there is headroom, 48 seconds when there is not.
 
-Popular items ranked SKU-000001 first in both runs with the same Zipf-shaped tail as every previous week.
-That is the cross-week check the course README asks for, and it confirms reporting survived being moved behind a network boundary.
+---
 
 ## What was verified, and what was assumed
 
-**Verified.** Every figure above comes from the two JSON reports or from a command whose output is quoted. The boundary tests were proven non-vacuous by planting four violations. The invariant check was proven non-vacuous by planting a 7-unit discrepancy. Idempotency was tested against the real database, including five concurrent copies of one request. Recovery was tested by simulating a crash between the two writes and restarting the service, which completed the sale without double-reducing stock.
+**Verified by running it:**
 
-**Assumed.** That Postgres is not a constraint. Its CPU could not be read, because Docker Desktop runs it in a VM whose process table is not visible from the host. Three database processes now, so less of the machine is accounted for than in week 5. The argument against Postgres being the limit is that the same hardware served 124 tx/sec in week 4 and is being asked for a fifth of that here, but it is an argument rather than a measurement.
+- All four load runs, zero errors across 417,021 operations.
+- The invariant after every one of them, zero unexplained violations, announced sales exactly matching applied.
+- All three outage scenarios, start to finish, with the commands in `reports/resilience-scenarios.md`.
+- The 48.8 ms median lag, over ten sales, with `scripts/measure_lag.sh`.
+- The 48 second drain under stress, printed by `check_invariant.sh`.
+- CPU for every process in every run, with `scripts/measure_cpu.sh`.
+- Both edges returning byte-identical responses across all seven endpoints and all six error codes, by diffing two smoke-test runs.
+- The boundary checks being non-vacuous, by planting a violation of each of the five in turn and confirming each one failed.
+- The broker's topology, read from its own management API rather than from the code that asked for it.
 
-**Not exercised by the load runs.** Zero payments were compensated and none were left unfinished, so none of the failure machinery ran during the measured runs. It is covered by 45 tests and by the manual drills in the README, not by these numbers.
+**Assumed, or reasoned rather than measured:**
 
-**A regression I did not predict.** The stress throughput drop of 26%. The plan predicted throughput would hold near week 5's. It is recorded in Part 2 with the reasoning that was wrong, rather than being presented as expected.
+- The claim that a second copy of checkout would lift the ceiling. Not tried.
+- The disk bound on the sale backlog, which is the broker's configured limit and arithmetic rather than a filled disk.
+- The 28 second scan-shedding figure, which is the queue size divided by the measured scan rate, not a reproduced 28 second outage.
+- That a broker restart loses queued scans. It follows from publishing them transiently and was not exercised.
+- The attribution of the stress lag to event-loop starvation. The CPU figure supports it and nothing else explains it, but the relay was not profiled.
 
-## A note on choreography
+**Not done:**
 
-The assignment permitted orchestration or choreography, and this is orchestration: checkout drives the sequence and issues the compensation.
-
-Choreography would have meant each service publishing events and reacting to others', with no central coordinator.
-It was rejected for two reasons.
-The contract returns a complete receipt from the payment call, so a caller must be given a final answer before that call returns, and an event-driven payment would have to block waiting for a round trip anyway.
-And it needs a message broker, which is a new moving part and a new failure mode for a system with three services.
-
-What it would have bought is looser coupling: checkout would not need to know that inventory exists. What it would have cost is that no single file would describe what paying does, which matters more at this size than the coupling does.
+- No alerting on a dead relay. Named as a failure mode, not addressed.
+- The same four runs were not repeated to check variance. Each figure is one run.

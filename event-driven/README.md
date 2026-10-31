@@ -1,188 +1,170 @@
-# Self-Checkout, Microservices (Week 6)
+# Self-Checkout, Event-Driven (Week 7)
 
-The same self-checkout API contract from `../spec/self-checkout-openapi.yaml`, split into microservices that each own their data.
+The same seven endpoints, the same load client, the seventh architecture.
 
-Week 5 divided the system into three services, but they still shared one database.
-That meant the coupling had moved rather than gone: any service could read any table, and paying for a basket was still a single transaction that marked the basket paid and reduced stock together.
+This week the services stop calling each other entirely.
+Everything that used to be a request from one service to another is now a message handed to a broker, and the service that cares subscribes to it.
+The edge also changes: nginx replaces the hand-written Python gateway, with the gateway kept so the two can be measured against each other.
 
-This week each service gets its own database.
-That one change removes the transaction, because the two halves of a payment now live in different Postgres instances and nothing can span them.
-Paying becomes a sequence of steps across two services, with a record of how far it got and a way back if a step fails.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and how the pieces fit together.
+Built on [week 6's microservices](../microservices), copied and verified identical with `diff -r` before anything changed, so every difference below is deliberate.
 
-Built on [week 5's service-based implementation](../service-based), copied and verified identical before any change, so every difference below is deliberate.
+## What changed
 
-## The microservices
+**Services no longer hold each other's addresses.**
+Week 6's checkout held `INVENTORY_URL` and `ANALYTICS_URL` and called both during a payment.
+This week there is no such setting in any service, and `tests/test_boundaries.py` reads the source to prove it.
 
-```
-load client
-     |
-     v
-  gateway :8080          routes by URL path, holds no data and no rules
-     |
-     +---> checkout  :8081  ----> checkout database  :5437
-     |                             baskets, basket lines, payment progress
-     |
-     +---> inventory :8082  ----> inventory database :5438
-     |                             the catalogue, stock levels, applied requests
-     |
-     +---> analytics :8083  ----> analytics database :5439
-                                   the scan stream and the published ranking
-```
+**The payment saga is gone.**
+Paying is one transaction against checkout's own database: the basket flips to `COMPLETED` and the outgoing message is written into an `outbox` table together.
+A background relay delivers that message afterwards.
+Four files were deleted and nothing replaced them.
 
-| Service       | Business function    | Endpoints                                                                                                           | Its data store holds                                                    |
-|---------------|----------------------|---------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
-| **checkout**  | Selling              | `POST /transactions`, `POST /transactions/{id}/items`, `POST /transactions/{id}/complete`, `GET /transactions/{id}` | `transactions`, `transaction_items`, `payment_saga`, a catalogue copy   |
-| **inventory** | Stock                | `GET /items`, `GET /inventory/low-stock`                                                                            | `catalog` (authoritative), `stock`, `applied_requests`                  |
-| **analytics** | Reporting            | `GET /analytics/popular-items`                                                                                      | `scan_log`, `popularity_state`, `popularity_snapshot`, a catalogue copy |
-| **gateway**   | Not a domain service | forwards all of the above                                                                                           | nothing. No database driver, no shared library, no business rules       |
-
-The gateway exists because the load client can only be pointed at one address.
-It is the caller-facing tier rather than a fourth microservice, and the assignment permits it explicitly.
-
-### Who owns what, and what had to be copied
-
-| Table                 | checkout  | inventory | analytics |
-|-----------------------|-----------|-----------|-----------|
-| `catalog`             | copy      | **owner** | copy      |
-| `stock`               |           | **owner** |           |
-| `transactions`        | **owner** |           |           |
-| `transaction_items`   | **owner** |           |           |
-| `payment_saga`        | **owner** |           |           |
-| `applied_requests`    |           | **owner** |           |
-| `scan_log`            |           |           | **owner** |
-| `popularity_state`    |           |           | **owner** |
-| `popularity_snapshot` |           |           | **owner** |
-
-The catalogue is the one thing copied three ways.
-All three services need item names and prices, none may read another's store, and catalogue rows never change while the system runs, so the copies cannot drift apart.
-The alternative was a call to inventory on every scan, which runs about 1,300 times a second and is the operation the previous weeks worked hardest to keep fast.
-
-`tests/test_boundaries.py` checks the rest mechanically: no service names a table it does not own, no service constructs another's settings, and only checkout carries an HTTP client.
-
-## How a payment works now
-
-Paying changes two databases, so it runs as a saga: a sequence of local transactions, each recorded, with a way to undo the ones already applied.
-
-```
-1. claim the basket and write down what this payment intends to reduce   (checkout db)
-2. ask inventory to take that stock off the shelf                        (inventory db)
-3. mark the basket paid and the saga done                                (checkout db)
-```
-
-**Stock goes first on purpose.**
-Crashing after step 2 leaves the shop believing it has less than it does, which cannot oversell.
-The other order would hand a shopper a receipt for stock still on the shelf.
-
-**A failed step is undone.**
-If the stock call fails, checkout asks inventory to undo that key and refuses the payment.
-Undoing something that was never applied changes nothing, which matters because a lost reply looks exactly like a lost request.
-
-**A crash is repaired at the next startup.**
-Compensation is code, and a dead process runs none.
-What survives is the saga row, so checkout reads any left unfinished when it starts, asks inventory whether each one actually moved stock, and drives each to a completed sale or a full undo.
-It does this before accepting traffic, because serving first would let a shopper scan into a basket whose stock had already been taken.
-
-**A repeated instruction is harmless.**
-Every stock change carries a key, and inventory records that key in the same transaction that moves the stock.
-A second request with the same key changes nothing and reports success exactly as the first did.
-
-### How a scan reaches reporting
-
-Analytics owns the scan log, and checkout cannot write to it.
-A scan is dropped onto an in-memory queue and the request ends; a background writer posts batches of up to 200 to analytics.
-A shopper never waits for this, and if analytics is down the batch is counted as lost rather than retried, because a writer stuck retrying would back the queue up and start dropping scans anyway.
+**The edge is a choice.**
+`./scripts/start_all.sh --edge=nginx` or `--edge=python`, listening on 8080 either way.
 
 ## Results
 
 Same client, same parameters, same machine as the previous weeks.
-Reports in `reports/`.
+Reports in `reports/` (graded, nginx edge) and `reports/comparison/` (Python gateway edge).
+
+Two things changed this week, the communication style and the edge, which one pair of runs could not separate.
+So there are four runs: both parameter sets against each edge.
+The nginx pair against week 6 shows the whole change; the Python-gateway pair against week 6 shows the events alone.
 
 ### Default (10 stations, 60s)
 
-|                  | monolith | layered | pipeline | service-based | microservices |
-|------------------|----------|---------|----------|---------------|---------------|
-| Transactions/sec | 98.3     | 99.7    | 123.6    | 45.1          | **41.0**      |
-| Items/sec        | 1,032.6  | 1,048.2 | 1,300.9  | 471.1         | **428.2**     |
-| START p95        | 3.79ms   | 3.67ms  | 4.58ms   | 29.05ms       | **29.30ms**   |
-| SCAN p95         | 9.68ms   | 9.49ms  | 7.10ms   | 28.30ms       | **29.96ms**   |
-| COMPLETE p95     | 21.48ms  | 20.95ms | 31.95ms  | 30.58ms       | **47.05ms**   |
-| Error rate       | 0.00%    | 0.00%   | 0.00%    | 0.00%         | **0.00%**     |
+|                  | monolith | layered | pipeline | service-based | microservices | event-driven (python) | event-driven (nginx) |
+| ---------------- | -------- | ------- | -------- | ------------- | ------------- | --------------------- | -------------------- |
+| Transactions/sec | 98.3     | 99.7    | 123.6    | 45.1          | 41.0          | 37.8                  | **98.7**             |
+| Items/sec        | 1,032.6  | 1,048.2 | 1,300.9  | 471.1         | 428.2         | 406.2                 | **1,047.8**          |
+| START p95        | 3.79ms   | 3.67ms  | 4.58ms   | 29.05ms       | 29.30ms       | 32.50ms               | **6.58ms**           |
+| SCAN p95         | 9.68ms   | 9.49ms  | 7.10ms   | 28.30ms       | 29.96ms       | 33.06ms               | **10.72ms**          |
+| COMPLETE p95     | 21.48ms  | 20.95ms | 31.95ms  | 30.58ms       | 47.05ms       | 31.82ms               | **10.19ms**          |
+| Error rate       | 0.00%    | 0.00%   | 0.00%    | 0.00%         | 0.00%         | 0.00%                 | **0.00%**            |
 
 ### Stress (100 stations, 120s)
 
-|                  | monolith   | layered    | pipeline   | service-based | microservices |
-|------------------|------------|------------|------------|---------------|---------------|
-| Transactions/sec | 117.0      | 115.8      | 124.5      | 37.6          | **27.8**      |
-| Items/sec        | 1,222.2    | 1,213.4    | 1,313.7    | 397.4         | **290.0**     |
-| START p95        | 6.59ms     | 7.13ms     | 7.07ms     | 588.57ms      | **936.01ms**  |
-| SCAN p95         | 18.39ms    | 19.37ms    | 10.88ms    | 490.93ms      | **749.83ms**  |
-| COMPLETE p95     | 2,722.91ms | 2,712.42ms | 2,726.74ms | 486.44ms      | **734.76ms**  |
-| Error rate       | 0.00%      | 0.02%      | 0.02%      | 0.00%         | **0.00%**     |
+|                  | monolith   | layered    | pipeline   | service-based | microservices | event-driven (python) | event-driven (nginx) |
+| ---------------- | ---------- | ---------- | ---------- | ------------- | ------------- | --------------------- | -------------------- |
+| Transactions/sec | 117.0      | 115.8      | 124.5      | 37.6          | 27.8          | 39.3                  | **168.2**            |
+| Items/sec        | 1,222.2    | 1,213.4    | 1,313.7    | 397.4         | 290.0         | 412.8                 | **1,767.1**          |
+| START p95        | 6.59ms     | 7.13ms     | 7.07ms     | 588.57ms      | 936.01ms      | 515.92ms              | **41.74ms**          |
+| SCAN p95         | 18.39ms    | 19.37ms    | 10.88ms    | 490.93ms      | 749.83ms      | 423.70ms              | **61.26ms**          |
+| COMPLETE p95     | 2,722.91ms | 2,712.42ms | 2,726.74ms | 486.44ms      | 734.76ms      | 439.17ms              | **67.01ms**          |
+| Error rate       | 0.00%      | 0.02%      | 0.02%      | 0.00%         | 0.00%         | 0.00%                 | **0.00%**            |
 
 ### Reading these numbers
 
-**Throughput fell again, by 9% at default load and 26% under stress.**
-The reason is arithmetic rather than mystery.
-The load client runs a fixed number of stations, each doing one transaction at a time, so throughput is stations divided by how long a transaction takes.
-Paying now costs an extra network round trip and a second database commit, so a transaction takes longer, so fewer finish per second.
+**This is the fastest week in the series under stress**, at 168.2 transactions and 1,767.1 items per second, past the pipeline's 124.5 and 1,313.7.
+It is also the first week since the split to match the single-process weeks at default load.
 
-**Completion got slower, and that is the honest cost of the split.**
-COMPLETE p95 rose from 30.58ms to 47.05ms at default load.
-One local transaction became two commits in different databases with an HTTP call between them.
+**Almost all of that is the edge, not the events.**
+The two event-driven columns differ only in which process sits on port 8080.
+Swapping the Python gateway for nginx took default throughput from 37.8 to 98.7 transactions per second, and stress throughput from 39.3 to 168.2.
+The measured reason is in the CPU table below: the gateway spent 86.5% of a core at default load and 94.7% under stress, while nginx spent 8.9% and 11.6% doing the same job.
 
-**Scanning barely moved**, from 28.30ms to 29.96ms, because the scan path gained no synchronous work.
-Scans still go to a queue and the shopper's request ends there; only the destination changed from a shared table to another service.
+Weeks 5 and 6 both named the gateway as the suspected bottleneck without being able to prove it, because there was nothing to compare it against.
+This week there is, and it was.
 
-**The gateway is still the ceiling.**
-Measured during the runs, it sat at 87.3% of a CPU core at default load and 86.3% under stress, while the two services that do the real work sat well below it.
-Week 5 proved the gateway was the bottleneck; this week it still is.
+**What the events alone bought** is the Python-gateway column against week 6, which holds the edge fixed.
+At default load throughput fell 7.8%, from 41.0 to 37.8, and completion got 32% faster, from 47.05ms to 31.82ms.
+Under stress throughput rose 41%, from 27.8 to 39.3, and every latency roughly halved.
 
-| CPU during the run | gateway   | checkout | inventory | analytics |
-|--------------------|-----------|----------|-----------|-----------|
-| Default            | **87.3%** | 76.9%    | 7.3%      | 25.6%     |
-| Stress             | **86.3%** | 54.4%    | 5.0%      | 14.7%     |
+That shape is the point.
+A payment used to be two database commits in different services with a blocking HTTP call between them.
+It is now one commit, and the shopper's request ends there.
+Under stress, where week 6's synchronous call made every station wait on inventory, removing the wait is worth more than the broker costs.
 
-Checkout jumped from 52.9% last week to 76.9% this week at the same load level, which is the saga showing up as real work rather than as an idea.
+**Scanning stayed where it has been since week 4.**
+10.72ms p95 against the pipeline's 7.10ms, through two extra network hops and a broker.
+The scan path has not changed shape since week 4: queue it in memory, batch it, send it in the background, never make the shopper wait.
 
-**Both runs had zero errors**, which is better than layered and pipeline managed under stress.
+**Checkout is now the ceiling.**
+With nginx at the edge, checkout sits at 99.5% of a core under stress while everything else is nearly idle.
+That is the next thing that would have to be fixed, and it would be fixed by running two copies of checkout, which this architecture allows and week 6's did not in the same way.
+
+| CPU during the run, percent of one core | edge      | checkout  | inventory | analytics |
+| --------------------------------------- | --------- | --------- | --------- | --------- |
+| nginx, default                          | **8.9%**  | 87.9%     | 15.4%     | 33.8%     |
+| nginx, stress                           | **11.6%** | **99.5%** | 4.8%      | 14.8%     |
+| Python gateway, default                 | **86.5%** | 53.1%     | 5.5%      | 20.8%     |
+| Python gateway, stress                  | **94.7%** | 52.0%     | 5.1%      | 11.5%     |
+
+Measured with `./scripts/measure_cpu.sh`, which samples each process's cumulative CPU time across the run.
+
+**The one regression: under saturation, stock lags by seconds rather than milliseconds.**
+At default load the outbox was empty the moment the run ended.
+Under stress it took **48 seconds** after the run to drain.
+The relay shares an event loop with checkout's request handlers, and at 99.5% of a core it gets starved.
+See QUALITY-ATTRIBUTES for why this is acceptable here and what would fix it.
 
 ### Correctness
 
-|         | negative stock | exact | explained by selling out | unexplained | payments compensated |
-|---------|----------------|-------|--------------------------|-------------|----------------------|
-| Default | 0              | 2000  | 0                        | 0           | 0                    |
-| Stress  | 0              | 2000  | 0                        | 0           | 0                    |
+Checked after all four runs with `./scripts/check_invariant.sh`, which waits for the outbox to drain before comparing anything.
 
-Every unit sold came off the shelf, in both runs, across two databases that cannot see each other.
+| Run                     | SKUs exact | Explained by selling out | Unexplained | Sales announced / applied |
+| ----------------------- | ---------- | ------------------------ | ----------- | ------------------------- |
+| nginx, default          | 2,000      | 0                        | **0**       | 5,936 / 5,936             |
+| nginx, stress           | 1,998      | 2                        | **0**       | 20,254 / 20,254           |
+| Python gateway, default | 2,000      | 0                        | **0**       | 2,278 / 2,278             |
+| Python gateway, stress  | 2,000      | 0                        | **0**       | 4,787 / 4,787             |
 
-No payment was compensated and none was left unfinished, which means the failure machinery never ran during the measured runs.
-It is exercised by the tests and by the drills described below, not by these numbers.
+Zero errors across all four runs, 417,021 operations in total.
+
+The two SKUs "explained by selling out" are items that ran past 10,000 units; the contract defines no out-of-stock response, so stock floors at zero.
+Every previous week recorded the same case.
+
+### Resilience
+
+The point of the broker, measured rather than asserted.
+Full method and figures in [reports/resilience-scenarios.md](reports/resilience-scenarios.md).
+
+| Scenario          | Shopper affected? | Work lost |
+| ----------------- | ----------------- | --------- |
+| Inventory stopped | No, 20/20 paid    | None      |
+| Broker stopped    | No, 20/20 paid    | None      |
+| Analytics stopped | No, latency flat  | None      |
+
+The analytics result is new.
+Week 6 dropped scans published while analytics was down; this week all 7,120 of them waited in the queue and arrived afterwards.
 
 ## Requirements
 
-- Docker, for three Postgres containers
+- Docker, for three Postgres containers and RabbitMQ
 - [`uv`](https://docs.astral.sh/uv/)
-- JDK 21+, only to build and run the load client
+- **nginx**, installed natively. Tested against 1.31.8 from Homebrew: `brew install nginx`
+- JDK 21+ for the load client, and it must be a **native arm64 build** on Apple Silicon. The client uses virtual threads so 17 will not run it, and the x86 Temurin 21 that earlier weeks named will not start on this machine at all. `brew install openjdk@21` works.
+
+nginx runs natively rather than in a container on purpose.
+A container on macOS reaches the host through a network translation layer that the Python gateway, a host process on loopback, does not pay.
+Putting one edge behind that and not the other would measure Docker instead of the edge.
+This costs the week a little self-containment and is recorded as a deviation in QUALITY-ATTRIBUTES.
 
 ## Setup
 
-Self-contained: its own databases, nothing shared with the other weeks.
+Self-contained: its own databases and its own broker, nothing shared with the other weeks.
 
 ```bash
-docker compose up -d        # Postgres on 5437, 5438, 5439
+docker compose up -d        # Postgres on 5440, 5441, 5442; RabbitMQ on 5672, UI on 15672
 uv sync --all-packages      # a workspace syncs only the root without the flag
 cp .env.example .env
-./scripts/reset_db.sh       # all three stores, 2000 SKUs, 10,000 units each
+./scripts/reset_db.sh       # all three stores, 2000 SKUs, 10,000 units each, and both queues emptied
 ```
 
-Ports 5437 to 5439 because 5433 through 5436 belong to the earlier weeks, so all five can run at once.
+Ports 5440 to 5442 because 5433 through 5439 belong to the earlier weeks, so all seven can run at once.
+
+The broker's management UI is at <http://localhost:15672> with guest/guest.
+Both queues are visible there while traffic runs, which is the quickest way to see the system working.
 
 ## Running
 
 ```bash
-./scripts/start_all.sh      # gateway 8080, checkout 8081, inventory 8082, analytics 8083
+./scripts/start_all.sh --edge=nginx     # or --edge=python
 ./scripts/stop_all.sh
 ```
+
+It refuses to start if anything already holds 8080, because a run with the wrong edge measures the wrong thing.
 
 Each service is independently deployable and can be started on its own:
 
@@ -190,56 +172,68 @@ Each service is independently deployable and can be started on its own:
 uv run --directory inventory python -m app.serve
 ```
 
-`start_all.sh` is a convenience that saves four terminals, not a dependency.
-
 Use these launchers rather than starting `hypercorn` directly.
 The Java load client asks to switch to a newer version of HTTP on every request, and accepting makes the server collapse under sustained load.
 Each service's `serve.py` refuses the switch, and week 1's README documents the full investigation.
 
+### A single service, stopped and started
+
+```bash
+./scripts/stop_one.sh inventory
+./scripts/stop_one.sh inventory --start
+```
+
 ## Tests
 
 ```bash
-uv run pytest                              # cross-service boundary checks
-cd checkout  && uv run pytest              # checkout, including the saga
+uv run pytest                              # cross-service boundaries and broker topology
+cd checkout  && uv run pytest              # checkout, including the outbox and the relay
 cd inventory && uv run pytest              # inventory, including idempotency
 cd analytics && uv run pytest              # the ranking rebuilder
 ```
 
-45 tests. Most need no database and no web server.
+47 tests. Most need no database, no broker and no web server.
 
-Four do need the inventory database running, deliberately: the guarantee that a repeated stock change moves stock once comes from a Postgres `ON CONFLICT` clause, and a stand-in would only be testing the stand-in. They skip with a message when the database is not up.
+Some do need the real thing, deliberately.
+The outbox's guarantee is a Postgres transaction and idempotency is a Postgres `ON CONFLICT` clause, so a stand-in would only be testing the stand-in.
+The topology tests read the broker's own description of itself through its management API.
+All of them skip with a message when what they need is not running.
+
+**Do not run the test suites while a load run is in progress.**
+The inventory tests move real stock, and four of their units once turned up as an invariant violation in a benchmark that was otherwise clean.
 
 **There is no linter configured for this project**, so "run the linter" is not something that can be done here.
 
 ## Reproducing the load tests
 
-Build the client once. This machine's default Java is 17 and the client needs 21+:
-
-```bash
-cd ../load-client
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
-export PATH="$JAVA_HOME/bin:$PATH"
-./build.sh
-```
-
 Stop the other weeks' containers first, so the databases are not sharing CPU:
 
 ```bash
-docker stop self-checkout-db self-checkout-db-layered self-checkout-db-pipeline self-checkout-db-services
+cd ../monolith && docker compose down
+cd ../layered && docker compose down
+cd ../pipeline && docker compose down
+cd ../service-based && docker compose down
+cd ../microservices && docker compose down
+cd ../event-driven && docker compose up -d
 ```
 
-Reset and restart before **each** run, or the two are not comparable.
+All four runs, with a reset and a restart between each:
 
 ```bash
-# default
-cd ../microservices && ./scripts/reset_db.sh && ./scripts/start_all.sh
-cd ../load-client
-./run.sh --baseUrl=http://localhost:8080 --stations=10 --duration=60 --reportDir=../microservices/reports
+./scripts/run_all_benchmarks.sh
+```
 
-# stress
-cd ../microservices && ./scripts/stop_all.sh && ./scripts/reset_db.sh && ./scripts/start_all.sh
+Or one pair at a time: `--only=nginx` or `--only=python`.
+
+By hand, one run:
+
+```bash
+./scripts/stop_all.sh && ./scripts/reset_db.sh && ./scripts/start_all.sh --edge=nginx
+
 cd ../load-client
-./run.sh --baseUrl=http://localhost:8080 --stations=100 --duration=120 --reportDir=../microservices/reports
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+export PATH="$JAVA_HOME/bin:$PATH"
+./run.sh --baseUrl=http://localhost:8080 --stations=10 --duration=60 --reportDir=../event-driven/reports
 ```
 
 ### Checking correctness after a run
@@ -248,57 +242,48 @@ cd ../load-client
 ./scripts/check_invariant.sh
 ```
 
-Units sold live in the checkout store and quantities in the inventory store, so this reads both and compares them outside the database.
-It exits non-zero on any unexplained discrepancy, or on a payment left unfinished.
-
-That is itself a finding worth noting: in every previous week this was one SQL query, because a join could see both halves.
-The property did not get weaker, but the thing enforcing it moved out of the database and into a script.
+It waits for checkout's outbox to empty before comparing, because stock catching up is the normal state of this system rather than a fault.
 
 ### Exercising the failure paths
 
-None of these happen during a normal load run, which is why they are worth doing by hand.
-
 ```bash
-# a payment refused because inventory is unreachable
-kill $(cat logs/inventory.pid)
-curl -X POST http://localhost:8080/transactions/tx-1/complete     # 409 within ~2s, not a hang
-
-# a repeated stock change
-curl -X POST http://localhost:8082/internal/stock/reduce \
-  -H 'Content-Type: application/json' \
-  -d '{"idempotencyKey":"demo","lines":[{"sku":"SKU-000001","qty":5}]}'
-# send it twice: the second returns {"applied":true,"alreadyApplied":true} and moves nothing
-
-# a crash mid-payment: kill checkout between the stock call and the basket being marked paid, then restart it.
-# Recovery runs before it accepts traffic and drives the saga to DONE or COMPENSATED.
+./scripts/run_scenarios.sh        # all three outages, start to finish
+./scripts/measure_lag.sh 10       # how long stock takes to catch up
+./scripts/smoke_test.sh           # seven endpoints, six refusals, through whichever edge is up
 ```
+
+### What bounds the backlog
+
+Two places hold undelivered work.
+
+Scans waiting to leave checkout sit in an in-memory queue capped at 50,000 (`MAX_PENDING` in `checkout/app/ingest.py`).
+Above that, new scans are counted and dropped rather than blocking a sale.
+At the stress run's scan rate that is about 28 seconds of total broker unavailability before the first scan is shed.
+
+Sales waiting in the broker have no queue-level limit.
+RabbitMQ stops accepting publishes when free disk falls below `disk_free_limit`, 50 MB on this broker against 971 GB free.
+A sale message is a few hundred bytes, so the practical bound is the disk and is not one this system would reach.
 
 ## Project layout
 
 ```
-microservices/
-├── common/                        the wire contract only, no SQL
-│   └── common/{config,errors,schemas,error_handlers,pool}.py
-├── gateway/     app/{main,serve,routes}.py                         :8080
-├── checkout/    app/
-│   ├── data/{baskets_repo,catalog_repo,saga_repo}.py
-│   ├── clients/{inventory_client,analytics_client}.py              outbound calls
-│   ├── saga/{coordinator,recovery}.py                              <- the payment sequence
-│   └── {main,serve,service,ingest,wiring}.py                       :8081
-├── inventory/   app/
-│   ├── data/{catalog_repo,stock_repo}.py
-│   ├── api/{routes,internal_routes}.py
-│   └── {main,serve,service,stock_mover,wiring}.py                  :8082
-├── analytics/   app/
-│   ├── data/{catalog_repo,scans_repo,ranking_repo}.py
-│   ├── api/{routes,internal_routes}.py
-│   └── {main,serve,service,rebuilder,wiring}.py                    :8083
-├── db/{checkout,inventory,analytics}/schema.sql, seed.py, check_invariant.py
-├── scripts/{reset_db,start_all,stop_all,check_invariant}.sh
-├── tests/test_boundaries.py       no service touches another's data
-├── reports/                       the two submitted runs
-├── docker-compose.yml             three Postgres instances
-└── pyproject.toml                 uv workspace, five members
+event-driven/
+├── common/common/bus.py        how every service reaches the broker, and nothing about what they say
+├── checkout/   8081   app/bus/publisher.py, app/outbox.py, app/data/outbox_repo.py
+├── inventory/  8082   app/bus/consumer.py, app/stock_mover.py
+├── analytics/  8083   app/bus/consumer.py, app/rebuilder.py
+├── edge/
+│   ├── gateway/       the Python reverse proxy, carried from week 5
+│   ├── nginx.conf     the same routing table as nginx configuration
+│   └── proxy.conf     the proxy settings every route shares
+├── db/                three schemas, one seed, the invariant check
+├── scripts/           start, stop, reset, smoke, scenarios, benchmarks, lag, CPU
+├── reports/           the two graded runs, plus the resilience write-up
+│   └── comparison/    the same two runs against the Python gateway
+├── ARCHITECTURE.md    the diagram and how a purchase works
+└── QUALITY-ATTRIBUTES.md
 ```
 
-See [QUALITY-ATTRIBUTES.md](QUALITY-ATTRIBUTES.md) for what this architecture bought and what it cost.
+## Submission
+
+<https://github.com/colecperry/CS6510-2026/tree/main/event-driven>

@@ -12,8 +12,10 @@ from app.data.stock_repo import StockRepo
 from app.stock_mover import StockMover
 from common.config import InventorySettings
 
-SKU = "SKU-000001"
 pytestmark = pytest.mark.asyncio
+
+# How much stock the chosen item needs before a test touches it. A load run can empty a popular item completely, and apply_delta floors at zero, so a test pinned to a sold-out SKU would measure a reduction that could not happen.
+NEEDED = 100
 
 
 async def _pool():
@@ -25,27 +27,30 @@ async def _pool():
         pytest.skip("inventory database is not running")
 
 
-async def _qty(pool) -> int:
-    return await pool.fetchval("SELECT qty FROM stock WHERE sku = $1", SKU)
+async def _qty(pool, sku: str) -> int:
+    return await pool.fetchval("SELECT qty FROM stock WHERE sku = $1", sku)
 
 
 @pytest.fixture
 async def mover():
     pool = await _pool()
     # Ids are generated per run, because applying one leaves a row behind for ever. A fixed id would pass once and then fail on every later run.
-    yield StockMover(pool, StockRepo(pool)), pool
+    sku = await pool.fetchval("SELECT sku FROM stock WHERE qty >= $1 ORDER BY sku LIMIT 1", NEEDED)
+    if sku is None:
+        pytest.skip(f"no item has {NEEDED} units left; run ./scripts/reset_db.sh")
+    yield StockMover(pool, StockRepo(pool)), pool, sku
     await pool.close()
 
 
 async def test_the_same_message_twice_moves_stock_once(mover):
-    stock_mover, pool = mover
+    stock_mover, pool, sku = mover
     message_id = uuid.uuid4()
-    before = await _qty(pool)
+    before = await _qty(pool, sku)
 
-    first = await stock_mover.reduce(message_id, [(SKU, 3)])
-    after_first = await _qty(pool)
-    second = await stock_mover.reduce(message_id, [(SKU, 3)])
-    after_second = await _qty(pool)
+    first = await stock_mover.reduce(message_id, [(sku, 3)])
+    after_first = await _qty(pool, sku)
+    second = await stock_mover.reduce(message_id, [(sku, 3)])
+    after_second = await _qty(pool, sku)
 
     assert first is True and second is False      # the second call reports it changed nothing
     assert after_first == before - 3
@@ -54,24 +59,24 @@ async def test_the_same_message_twice_moves_stock_once(mover):
 
 async def test_concurrent_copies_of_one_sale_still_move_stock_once(mover):
     # A redelivery can overlap the original rather than following it. If the check and the insert were separate statements, both copies could pass the check and stock would go down twice.
-    stock_mover, pool = mover
+    stock_mover, pool, sku = mover
     message_id = uuid.uuid4()
-    before = await _qty(pool)
+    before = await _qty(pool, sku)
 
     results = await asyncio.gather(
-        *[stock_mover.reduce(message_id, [(SKU, 2)]) for _ in range(5)]
+        *[stock_mover.reduce(message_id, [(sku, 2)]) for _ in range(5)]
     )
 
     assert sum(results) == 1                       # exactly one of the five did the work
-    assert await _qty(pool) == before - 2
+    assert await _qty(pool, sku) == before - 2
 
 
 async def test_two_different_sales_both_move_stock(mover):
     # The other half of the guarantee. Deduplicating is only correct if it deduplicates nothing else, and two shoppers buying the same item must both be charged for it.
-    stock_mover, pool = mover
-    before = await _qty(pool)
+    stock_mover, pool, sku = mover
+    before = await _qty(pool, sku)
 
-    assert await stock_mover.reduce(uuid.uuid4(), [(SKU, 1)]) is True
-    assert await stock_mover.reduce(uuid.uuid4(), [(SKU, 1)]) is True
+    assert await stock_mover.reduce(uuid.uuid4(), [(sku, 1)]) is True
+    assert await stock_mover.reduce(uuid.uuid4(), [(sku, 1)]) is True
 
-    assert await _qty(pool) == before - 2
+    assert await _qty(pool, sku) == before - 2

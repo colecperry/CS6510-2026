@@ -49,7 +49,7 @@ class ReceiptLineRow(NamedTuple):
 
 
 class BasketsRepo:
-    def __init__(self, pool: asyncpg.Pool):
+    def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
     async def start(self, station_id: str) -> TransactionRow:
