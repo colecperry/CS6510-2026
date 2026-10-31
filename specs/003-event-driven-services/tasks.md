@@ -205,7 +205,7 @@ US5 is P1 but comes last, because evidence can only be gathered from a finished 
 - [X] T079 Confirm every parameter and return value in the new code under `event-driven/` is annotated, including the broker handler signatures, per the type annotation rule
 - [X] T080 Run every suite under `event-driven/{checkout,inventory,analytics}/tests/` from its own directory, and `event-driven/tests/` from the workspace root, and report pass counts
 - [X] T081 State explicitly in `event-driven/QUALITY-ATTRIBUTES.md` what was verified by running it and what was assumed, as Principle IV requires
-- [ ] T082 Commit `event-driven/` in full, push, and confirm the submission URL resolves to a repository containing all four reports and the diagram
+- [X] T082 Commit `event-driven/` in full, push, and confirm the submission URL resolves to a repository containing all four reports and the diagram
 
 ---
 
